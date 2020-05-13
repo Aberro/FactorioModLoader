@@ -1,9 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using MoonSharp.Interpreter;
+﻿using MoonSharp.Interpreter;
+// ReSharper disable StringLiteralTypo
 
-namespace FactorioRecipeCalculator
+namespace FactorioModLoader
 {
 	static class Defines
 	{

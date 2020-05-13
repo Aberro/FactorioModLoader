@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using MoonSharp.Interpreter;
 using MoonSharp.Interpreter.Loaders;
 
-namespace FactorioRecipeCalculator
+namespace FactorioModLoader
 {
 	public class ModuleScriptLoader : IScriptLoader
 	{

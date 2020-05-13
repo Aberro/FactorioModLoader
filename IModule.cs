@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 
-namespace FactorioRecipeCalculator
+namespace FactorioModLoader
 {
 	public interface IModule
 	{

@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using Jil;
+using Utf8Json;
 
-namespace FactorioRecipeCalculator
+namespace FactorioModLoader
 {
 	/// <summary>
 	/// Class for loading factorio modules from directory
@@ -19,12 +18,9 @@ namespace FactorioRecipeCalculator
 			var infoPath = Path.Combine(path, "info.json");
 			if (!File.Exists(infoPath))
 				throw new ArgumentException("Module info not found!", nameof(path));
-			var info = JSON.DeserializeDynamic(File.OpenText(infoPath));
+			var info = JsonSerializer.Deserialize<dynamic>(File.Open(infoPath, FileMode.Open, FileAccess.Read, FileShare.Read));
 			Name = info["name"];
-			if(info.ContainsKey("version"))
-				Version = new Version((string)info["version"]);
-			else
-				Version = new Version();
+			Version = info.ContainsKey("version") ? new Version((string)info["version"]) : new Version();
 			Dependencies = LoadDependencies(info);
 
 			foreach (var file in Directory.EnumerateFiles(path, "*.lua", SearchOption.AllDirectories))

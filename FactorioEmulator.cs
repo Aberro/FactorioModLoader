@@ -1,35 +1,56 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using Jil;
+using JetBrains.Annotations;
 using MoonSharp.Interpreter;
+using Utf8Json;
 
-namespace FactorioRecipeCalculator
+namespace FactorioModLoader
 {
 	public class FactorioEmulator
 	{
 		private List<IModule> _activeModules = new List<IModule>();
 		private readonly List<IModule> _availableModules = new List<IModule>();
 		private readonly ModuleScriptLoader _loader;
+		[PublicAPI]
 		public string FactorioDirectory { get; }
+		[PublicAPI]
 		public string ModsDirectory { get; }
+		[PublicAPI]
+		public string CachePath { get; }
+		[PublicAPI]
 		public Script Lua { get; }
+		[PublicAPI]
 		public IList<IModule> ActiveModules { get; private set; }
+		[PublicAPI]
 		public IList<IModule> AvailableModules { get; }
-
+		[PublicAPI]
+		public FactorioData? Data { get; private set; }
+		[PublicAPI]
+		public bool Cached => Data != null;
+		[PublicAPI]
 		public event StageEventHandler? SettingsStage;
+		[PublicAPI]
 		public event StageEventHandler? SettingsUpdatesStage;
+		[PublicAPI]
 		public event StageEventHandler? SettingsFinalFixesStage;
+		[PublicAPI]
 		public event StageEventHandler? DataStage;
+		[PublicAPI]
 		public event StageEventHandler? DataUpdatesStage;
+		[PublicAPI]
 		public event StageEventHandler? DataFinalFixesStage;
+		[PublicAPI]
 		public event EventHandler? LoadingCompleted;
+		[PublicAPI]
 		public event ModuleFileEventHandler? ModuleFileLoading;
 
-		public FactorioEmulator(string factorioPath, string mods)
+		[PublicAPI]
+		public FactorioEmulator(string factorioPath, string modsPath, string cachePath)
 		{
+			CachePath = cachePath;
+			Data = File.Exists(cachePath) ? new FactorioData(cachePath) : null;
 			if (!Directory.Exists(factorioPath))
 				throw new ArgumentException("Factorio directory does not exists!");
 			var data = Path.Combine(factorioPath, "Data");
@@ -37,15 +58,14 @@ namespace FactorioRecipeCalculator
 			var @base = Path.Combine(data, "Base");
 			if (!(Directory.Exists(core) && Directory.Exists(@base) && Directory.Exists(Path.Combine(core, "lualib"))))
 				throw new ArgumentException("Factorio directory is invalid!");
-			if (!Directory.Exists(mods))
+			if (!Directory.Exists(modsPath))
 				throw new ArgumentException("Mods directory does not exists!");
 			ActiveModules = _activeModules;
 			AvailableModules = _availableModules.AsReadOnly();
 			FactorioDirectory = factorioPath;
-			ModsDirectory = mods;
+			ModsDirectory = modsPath;
 			_loader = new ModuleScriptLoader();
-			Lua = new Script(CoreModules.Preset_Complete);
-			Lua.Options.ScriptLoader = _loader;
+			Lua = new Script(CoreModules.Preset_Complete) {Options = {ScriptLoader = _loader}};
 			Defines.Define(Lua);
 			Lua.Globals["breakpoint"] = DynValue.NewCallback(Breakpoint);
 			Lua.Globals["log"] = DynValue.NewCallback(Log);
@@ -57,10 +77,11 @@ namespace FactorioRecipeCalculator
 			_availableModules.Add(baseMod);
 			_activeModules.Add(coreMod);
 			_activeModules.Add(baseMod);
+			// ReSharper disable once StringLiteralTypo
 			var dataLoader = "__core__/lualib/dataloader.lua";
 			Lua.DoStream(_loader.Load(dataLoader), Lua.Globals, dataLoader);
 			// Load zip archives
-			foreach (var archive in Directory.EnumerateFiles(mods, "*.zip", SearchOption.TopDirectoryOnly))
+			foreach (var archive in Directory.EnumerateFiles(modsPath, "*.zip", SearchOption.TopDirectoryOnly))
 			{
 				try
 				{
@@ -73,7 +94,7 @@ namespace FactorioRecipeCalculator
 			}
 
 			// Load unpacked mod directories
-			foreach(var modFolder in Directory.EnumerateDirectories(mods))
+			foreach(var modFolder in Directory.EnumerateDirectories(modsPath))
 				try
 				{
 					_availableModules.Add(new DirectoryModule(modFolder));
@@ -84,9 +105,12 @@ namespace FactorioRecipeCalculator
 				}
 		}
 
+		[PublicAPI]
 		public void Start()
 		{
-			void DefineSettings(dynamic raw, dynamic settings_startup, dynamic settings_global, dynamic settings_player, string settingType)
+			// ReSharper disable VariableHidesOuterVariable
+			void DefineSettings(dynamic raw, dynamic settingsStartup, dynamic settingsGlobal, dynamic settingsPlayer, string settingType)
+				// ReSharper restore VariableHidesOuterVariable
 			{
 				foreach (var setting in ((Table)raw[settingType]).Values.Select(x => x.Table))
 				{
@@ -94,17 +118,17 @@ namespace FactorioRecipeCalculator
 					{
 						var name = setting["name"];
 						if ((string) setting["setting_type"] == "startup")
-							settings_startup[name] = new Table(Lua)
+							settingsStartup[name] = new Table(Lua)
 							{
 								["value"] = setting["default_value"]
 							};
 						else if ((string) setting["setting_type"] == "runtime-global")
-							settings_global[name] = new Table(Lua)
+							settingsGlobal[name] = new Table(Lua)
 							{
 								["value"] = setting["default_value"]
 							};
 						else if ((string) setting["settings_type"] == "runtime-per-user")
-							settings_player[name] = new Table(Lua)
+							settingsPlayer[name] = new Table(Lua)
 							{
 								["value"] = setting["default_value"]
 							};
@@ -213,7 +237,6 @@ namespace FactorioRecipeCalculator
 			OnSettingsFinalFixesStage(new StageEventArgs(Lua));
 			DoStage(mod => mod.SettingsFinalFixes);
 
-			//TODO: resolve settings
 			var data = (dynamic) Lua.Globals["data"];
 			var raw = data["raw"];
 			var settings = (dynamic)(Lua.Globals["settings"] = new Table(Lua));
@@ -232,8 +255,7 @@ namespace FactorioRecipeCalculator
 			{
 				if (technology == null)
 					continue;
-				if (technology.Table["prerequisites"] == null)
-					technology.Table["prerequisites"] = new Table(Lua);
+				technology.Table["prerequisites"] ??= new Table(Lua);
 			}
 
 			OnDataUpdatesStage(new StageEventArgs(Lua));
@@ -242,14 +264,17 @@ namespace FactorioRecipeCalculator
 			OnDataFinalFixesStage(new StageEventArgs(Lua));
 			DoStage(mod => mod.DataFinalFixes);
 
+			Data = new FactorioData((Table)Lua.Globals["data"]);
+			Data.Save(CachePath);
 			OnLoadingCompleted();
 		}
+		[PublicAPI]
 		public void LoadModList()
 		{
 			var modListPath = Path.Combine(ModsDirectory, "mod-list.json");
 			if (!File.Exists(modListPath))
 				return;
-			var modList = JSON.DeserializeDynamic(File.OpenText(modListPath));
+			var modList = JsonSerializer.Deserialize<dynamic>(File.Open(modListPath, FileMode.Open, FileAccess.Read, FileShare.Read));
 			foreach (var mod in modList["mods"])
 			{
 				if(mod == null)
@@ -278,15 +303,16 @@ namespace FactorioRecipeCalculator
 			}
 		}
 
+		[PublicAPI]
 		public bool ActivateModule(IModule module)
 		{
-			if (_activeModules.Any(x => x.Name.Equals(module.Name) || x.Dependencies.Any(x => x.IncompatibleWith(module))))
+			if (_activeModules.Any(x => x.Name.Equals(module.Name) || x.Dependencies.Any(dep => dep.IncompatibleWith(module))))
 				return false;
 			_activeModules.Add(module);
 			_loader.Register(module);
 			return true;
 		}
-
+		[PublicAPI]
 		public bool DeactivateModule(IModule module)
 		{
 			if (!_activeModules.Contains(module))

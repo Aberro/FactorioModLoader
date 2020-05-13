@@ -3,10 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using Microsoft.CodeAnalysis;
-using Jil;
+using Utf8Json;
 
-namespace FactorioRecipeCalculator
+namespace FactorioModLoader
 {
 	/// <summary>
 	/// Class for loading factorio modules from zip archive
@@ -31,15 +30,11 @@ namespace FactorioRecipeCalculator
 				throw new ArgumentException("Module info not found!", nameof(path));
 			dynamic info;
 			using(var zipEntry = infoEntry.Open())
-			using (var reader = new StreamReader(zipEntry))
 			{
-				info = JSON.DeserializeDynamic(reader);
+				info = JsonSerializer.Deserialize<dynamic>(zipEntry);
 			}
 			Name = info["name"];
-			if(info.ContainsKey("version"))
-				Version = new Version((string)info["version"]);
-			else
-				Version = new Version();
+			Version = info.ContainsKey("version") ? new Version((string)info["version"]) : new Version();
 			Dependencies = LoadDependencies(info);
 
 			foreach (var entry in archive.Entries.Where(x => Path.GetExtension(x.Name) == ".lua"))

@@ -1,7 +1,8 @@
 ﻿using System;
+using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace FactorioRecipeCalculator
+namespace FactorioModLoader
 {
 	public class Dependency
 	{
@@ -50,10 +51,7 @@ namespace FactorioRecipeCalculator
 				">" => EqualityEnum.GreaterThan,
 				_ => EqualityEnum.GreaterOrEq
 			};
-			if(match.Groups["version"].Success)
-				Version = new Version(match.Groups["version"].Value);
-			else
-				Version = new Version();
+			Version = match.Groups["version"].Success ? new Version(match.Groups["version"].Value) : new Version();
 		}
 
 		public bool DependsOn(IModule module)
@@ -71,10 +69,7 @@ namespace FactorioRecipeCalculator
 				return DependsOn(module);
 			if (module == Module)
 				return true;
-			foreach(var subdep in Module.Dependencies)
-				if (subdep.ActuallyDependsOn(module))
-					return true;
-			return false;
+			return Module.Dependencies.Any(subDep => subDep.ActuallyDependsOn(module));
 		}
 
 		public bool IncompatibleWith(IModule module)
@@ -113,6 +108,7 @@ namespace FactorioRecipeCalculator
 					EqualityEnum.Equal => dependee.Version == Version,
 					EqualityEnum.GreaterOrEq => dependee.Version >= Version,
 					EqualityEnum.GreaterThan => dependee.Version > Version,
+					_ => dependee.Version >= Version
 				};
 				if (versionRequirement)
 				{
