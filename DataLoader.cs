@@ -79,7 +79,7 @@ namespace FactorioModLoader
 					if (!(value is string))
 					{
 						return _generator.CreateInterfaceProxyWithoutTarget(returnType,
-							new Interceptor(this, value, returnType));
+							new Interceptor(this, value));
 					}
 				}
 
@@ -109,7 +109,7 @@ namespace FactorioModLoader
 
 				if (returnType.IsAbstract)
 				{
-					return _generator.CreateClassProxy(returnType, new Interceptor(this, value, returnType));
+					return _generator.CreateClassProxy(returnType, new Interceptor(this, value));
 				}
 
 				var ctor = returnType.GetConstructor(new[] { typeof(DynamicMetaObject) });
@@ -139,7 +139,7 @@ namespace FactorioModLoader
 			try
 			{
 				Current = this;
-				return _generator.CreateInterfaceProxyWithoutTarget<T>(new Interceptor(this, data, typeof(T)));
+				return _generator.CreateInterfaceProxyWithoutTarget<T>(new Interceptor(this, data));
 			}
 			catch
 			{
@@ -153,7 +153,7 @@ namespace FactorioModLoader
 			private readonly DataLoader _loader;
 			private readonly dynamic _data;
 			private readonly Dictionary<MethodInfo, object?> _cache;
-			public Interceptor(DataLoader loader, object data, Type proxiedType)
+			public Interceptor(DataLoader loader, object data)
 			{
 				_loader = loader;
 

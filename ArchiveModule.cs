@@ -34,7 +34,13 @@ namespace FactorioModLoader
 				info = JsonSerializer.Deserialize<dynamic>(zipEntry);
 			}
 			Name = info["name"];
+			Title = info.ContainsKey("title") ? info["title"] : Name;
 			Version = info.ContainsKey("version") ? new Version((string)info["version"]) : new Version();
+			Version = info.ContainsKey("factorio_version") ? new Version((string)info["factorio_version"]) : new Version();
+			FactorioVersion = info.ContainsKey("factorio_version") ? new Version((string)info["factorio_version"]) : new Version();
+			Description = info.ContainsKey("description") ? info["description"] : "";
+			Author = info.ContainsKey("author") ? info["author"] : "";
+			Homepage = info.ContainsKey("homepage") ? info["homepage"] : "";
 			Dependencies = LoadDependencies(info);
 
 			foreach (var entry in archive.Entries.Where(x => Path.GetExtension(x.Name) == ".lua"))

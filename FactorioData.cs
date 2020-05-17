@@ -1,10 +1,13 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using FactorioModLoader.Prototypes;
+using JetBrains.Annotations;
 using MoonSharp.Interpreter;
 using Utf8Json;
 
@@ -13,54 +16,63 @@ namespace FactorioModLoader
 	public class FactorioData
 	{
 		private readonly DataLoader _loader = new DataLoader();
+		[PublicAPI]
 		public bool FromCache { get; private set; }
+		[PublicAPI]
 		public dynamic Data { get; }
+		[PublicAPI]
 		public IDictionary<string, ITechnology> Technology { get; private set; } = null!;
+		[PublicAPI]
 		public IDictionary<string, IRecipe> Recipe { get; private set; } = null!;
+		[PublicAPI]
 		public IDictionary<string, IFluid> Fluids { get; private set; } = null!;
+		[PublicAPI]
 		public IDictionary<string, IItem> Items { get; private set; } = null!;
 
-		public FactorioData(Table data)
+		internal FactorioData(Table data)
 		{
 			Data = LoadFromLua(data);
 			LoadRepositories();
 		}
 
-		public FactorioData(string cachePath)
+		internal static async Task<FactorioData> LoadFromCache(string cacheFile)
 		{
-			Data = LoadFromFile(cachePath);
+			return await Task.Run(async () =>
+			{
+				await using var fileStream = File.Open(cacheFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+				var data = await JsonSerializer.DeserializeAsync<dynamic>(fileStream);
+				return new FactorioData(data);
+			});
+		}
+		private FactorioData(dynamic data)
+		{
+			Data = LoadTable(data);
+			FromCache = true;
 			LoadRepositories();
 		}
 
 		private void LoadRepositories()
 		{
-			Technology = _loader.LoadRepository<ITechnology>("data.raw.technology", Data.raw.technology);
-			Recipe = _loader.LoadRepository<IRecipe>("data.raw.recipe", Data.raw.recipe);
-			Fluids = _loader.LoadRepository<IFluid>("data.raw.fluid", Data.raw.fluid);
-			Items = _loader.LoadRepository<IItem>("data.raw.item", Data.raw.item);
+			var data = (IDictionary<string, object>) Data;
+			var raw = (IDictionary<string, object>)data["raw"];
+			Technology = _loader.LoadRepository<ITechnology>("data.raw.technology", raw["technology"]);
+			Recipe = _loader.LoadRepository<IRecipe>("data.raw.recipe", raw["recipe"]);
+			Fluids = _loader.LoadRepository<IFluid>("data.raw.fluid", raw["fluid"]);
+			Items = _loader.LoadRepository<IItem>("data.raw.item", raw["item"]);
 		}
-		public void Save(string path)
+		public Task Save(string path)
 		{
-			var dir = Path.GetDirectoryName(path);
+			var dir = Path.GetDirectoryName(path) ?? "";
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
 			using var fileStream = File.Open(path, FileMode.Create, FileAccess.Write, FileShare.Read);
-			JsonSerializer.Serialize<dynamic>(fileStream, Data);
+			return JsonSerializer.SerializeAsync<dynamic>(fileStream, Data);
 		}
 
 		private dynamic LoadFromLua(Table data)
 		{
 			FromCache = false;
 			return LoadTable(data);
-		}
-
-		private dynamic LoadFromFile(string path)
-		{
-			if (!File.Exists(path))
-				throw new ArgumentException("File does not exists!", nameof(path));
-			FromCache = true;
-			using var fileStream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-			return LoadTable(JsonSerializer.Deserialize<dynamic>(fileStream));
 		}
 
 		private dynamic LoadTable(dynamic table)
@@ -113,8 +125,7 @@ namespace FactorioModLoader
 					if (pair.Key.Type != DataType.Number && pair.Key.Type != DataType.String)
 						continue;
 					var key = pair.Key.String ?? pair.Key.Number.ToString(CultureInfo.InvariantCulture);
-					if (key != null)
-						CollectionExtensions.TryAdd(result, key, LoadValue(pair.Value));
+					CollectionExtensions.TryAdd(result, key, LoadValue(pair.Value));
 				}
 
 				return result;

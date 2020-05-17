@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -18,8 +19,13 @@ namespace FactorioModLoader
 		public string? DataUpdates => ResolveFileName(ResolveModuleName("data-updates"));
 		public string? DataFinalFixes => ResolveFileName(ResolveModuleName("data-final-fixes"));
 		public abstract string Name { get; }
+		public string Title { get; protected set; } = null!;
 		public abstract Version Version { get; }
+		public Version? FactorioVersion { get; protected set; }
+		public string? Thumbnail { get; protected set; }
 		public string? Description { get; protected set; }
+		public string? Author { get; protected set; }
+		public string? Homepage { get; protected set; }
 		public abstract IEnumerable<Dependency> Dependencies { get; }
 		public abstract Stream Load(string fileName);
 

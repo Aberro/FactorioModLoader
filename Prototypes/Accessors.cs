@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Dynamic;
+using JetBrains.Annotations;
 
 namespace FactorioModLoader.Prototypes
 {
@@ -55,7 +56,7 @@ namespace FactorioModLoader.Prototypes
 
 	public class RecipeDataAccessor
 	{
-		public static IEnumerable<IProduct> Results(IRecipeData instance, dynamic data)
+		public static IEnumerable<IProduct> Results([UsedImplicitly]IRecipeData instance, dynamic data)
 		{
 			var dic = (IDictionary<string, object>) data;
 			if (dic.ContainsKey("results") && data.results != null)

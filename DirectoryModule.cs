@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Utf8Json;
 
 namespace FactorioModLoader
@@ -20,15 +21,25 @@ namespace FactorioModLoader
 				throw new ArgumentException("Module info not found!", nameof(path));
 			var info = JsonSerializer.Deserialize<dynamic>(File.Open(infoPath, FileMode.Open, FileAccess.Read, FileShare.Read));
 			Name = info["name"];
+			Title = info.ContainsKey("title") ? info["title"] : Name;
 			Version = info.ContainsKey("version") ? new Version((string)info["version"]) : new Version();
+			FactorioVersion = info.ContainsKey("factorio_version") ? new Version((string)info["factorio_version"]) : new Version();
+			Description = info.ContainsKey("description") ? info["description"] : "";
+			Author = info.ContainsKey("author") ? info["author"] : "";
+			Homepage = info.ContainsKey("homepage") ? info["homepage"] : "";
 			Dependencies = LoadDependencies(info);
 
-			foreach (var file in Directory.EnumerateFiles(path, "*.lua", SearchOption.AllDirectories))
+			var directoryInfo = new DirectoryInfo(path);
+			var extensions = new[] {".lua", ".png", ".jpg"};
+			var thumbnail = directoryInfo.GetFiles("thumbnail.*", SearchOption.TopDirectoryOnly).FirstOrDefault();
+			foreach (var file in directoryInfo.EnumerateFiles("*", SearchOption.AllDirectories).Where(file => extensions.Contains(file.Extension)))
 			{
-				var name = file;
-				var idx = file.IndexOf(path, StringComparison.InvariantCultureIgnoreCase);
+				var name = file.FullName;
+				var idx = name.IndexOf(path, StringComparison.InvariantCultureIgnoreCase);
 				name = $"__{Name}__" + name.Substring(idx+path.Length).Replace('\\', '/');
-				_cache.Add(name, file);
+				_cache.Add(name, file.FullName);
+				if (file.FullName == thumbnail?.FullName)
+					Thumbnail = name;
 			}
 		}
 

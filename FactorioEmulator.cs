@@ -1,32 +1,53 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using MoonSharp.Interpreter;
 using Utf8Json;
 
 namespace FactorioModLoader
 {
+	[PublicAPI]
 	public class FactorioEmulator
 	{
-		private List<IModule> _activeModules = new List<IModule>();
-		private readonly List<IModule> _availableModules = new List<IModule>();
+		private List<IModule> _activeModules;
+		private readonly List<IModule> _availableModules;
 		private readonly ModuleScriptLoader _loader;
+		private bool _hasStarted;
+		private readonly Script _lua;
+
 		[PublicAPI]
 		public string FactorioDirectory { get; }
 		[PublicAPI]
 		public string ModsDirectory { get; }
 		[PublicAPI]
 		public string CachePath { get; }
+		[PublicAPI] 
+		public bool IsLoading => _hasStarted && Data == null;
+
 		[PublicAPI]
-		public Script Lua { get; }
+		public Script Lua
+		{
+			get
+			{
+				if(_hasStarted && Data == null)
+					throw new InvalidOperationException($"Can't access {nameof(Lua)} property while running!");
+				return _lua;
+			}
+		}
+
 		[PublicAPI]
 		public IList<IModule> ActiveModules { get; private set; }
 		[PublicAPI]
 		public IList<IModule> AvailableModules { get; }
 		[PublicAPI]
 		public FactorioData? Data { get; private set; }
+		[PublicAPI]
+		public bool CacheExists => File.Exists(CachePath);
+
 		[PublicAPI]
 		public bool Cached => Data != null;
 		[PublicAPI]
@@ -44,13 +65,17 @@ namespace FactorioModLoader
 		[PublicAPI]
 		public event EventHandler? LoadingCompleted;
 		[PublicAPI]
+		public event EventHandler? LoadingError;
+		[PublicAPI]
 		public event ModuleFileEventHandler? ModuleFileLoading;
+		[PublicAPI]
+		public event ModuleEventHandler? ModuleActivated;
+		[PublicAPI]
+		public event ModuleEventHandler? ModuleDeactivated;
 
 		[PublicAPI]
-		public FactorioEmulator(string factorioPath, string modsPath, string cachePath)
+		public static async Task<FactorioEmulator> Create(string factorioPath, string modsPath, string cachePath)
 		{
-			CachePath = cachePath;
-			Data = File.Exists(cachePath) ? new FactorioData(cachePath) : null;
 			if (!Directory.Exists(factorioPath))
 				throw new ArgumentException("Factorio directory does not exists!");
 			var data = Path.Combine(factorioPath, "Data");
@@ -60,15 +85,57 @@ namespace FactorioModLoader
 				throw new ArgumentException("Factorio directory is invalid!");
 			if (!Directory.Exists(modsPath))
 				throw new ArgumentException("Mods directory does not exists!");
-			ActiveModules = _activeModules;
+			var archiveLoading = Task.WhenAll(Directory.EnumerateFiles(modsPath, "*.zip", SearchOption.TopDirectoryOnly)
+				.Select(
+					archive =>
+						Task.Run(() =>
+						{
+							try
+							{
+								return (IModule?)new ArchiveModule(archive);
+							}
+							catch
+							{
+								return null;
+							}
+						})));
+			var directoryLoading = Task.WhenAll(Directory
+				.EnumerateDirectories(modsPath, "*", SearchOption.TopDirectoryOnly).Select(
+					archive =>
+						Task.Run(() =>
+						{
+							try
+							{
+								return (IModule?)new DirectoryModule(archive);
+							}
+							catch
+							{
+								return null;
+							}
+						})));
+
+			var result = new FactorioEmulator(cachePath, factorioPath, modsPath, (await archiveLoading).Concat(await directoryLoading));
+			return result;
+		}
+
+		private FactorioEmulator(string cachePath, string factorioPath, string modsPath, IEnumerable<IModule?> availableModules)
+		{
+			// ReSharper disable once RedundantEnumerableCastCall
+			_availableModules = availableModules.Where(module => module != null).Cast<IModule>().ToList();
+			_activeModules = new List<IModule>();
+			CachePath = cachePath;
 			AvailableModules = _availableModules.AsReadOnly();
+			ActiveModules = _activeModules;
 			FactorioDirectory = factorioPath;
 			ModsDirectory = modsPath;
 			_loader = new ModuleScriptLoader();
-			Lua = new Script(CoreModules.Preset_Complete) {Options = {ScriptLoader = _loader}};
-			Defines.Define(Lua);
-			Lua.Globals["breakpoint"] = DynValue.NewCallback(Breakpoint);
-			Lua.Globals["log"] = DynValue.NewCallback(Log);
+			_lua = new Script(CoreModules.Preset_Complete) { Options = { ScriptLoader = _loader } };
+			Defines.Define(_lua);
+			_lua.Globals["breakpoint"] = DynValue.NewCallback(Breakpoint);
+			_lua.Globals["log"] = DynValue.NewCallback(Log);
+			var data = Path.Combine(factorioPath, "Data");
+			var core = Path.Combine(data, "Core");
+			var @base = Path.Combine(data, "Base");
 			var coreMod = new DirectoryModule(core);
 			var baseMod = new DirectoryModule(@base);
 			_loader.Register(coreMod);
@@ -77,81 +144,72 @@ namespace FactorioModLoader
 			_availableModules.Add(baseMod);
 			_activeModules.Add(coreMod);
 			_activeModules.Add(baseMod);
-			// ReSharper disable once StringLiteralTypo
 			var dataLoader = "__core__/lualib/dataloader.lua";
-			Lua.DoStream(_loader.Load(dataLoader), Lua.Globals, dataLoader);
-			// Load zip archives
-			foreach (var archive in Directory.EnumerateFiles(modsPath, "*.zip", SearchOption.TopDirectoryOnly))
-			{
-				try
-				{
-					_availableModules.Add(new ArchiveModule(archive));
-				}
-				catch
-				{
-					// ignored
-				}
-			}
+			_lua.DoStream(_loader.Load(dataLoader), _lua.Globals, dataLoader);
+		}
 
-			// Load unpacked mod directories
-			foreach(var modFolder in Directory.EnumerateDirectories(modsPath))
-				try
-				{
-					_availableModules.Add(new DirectoryModule(modFolder));
-				}
-				catch
-				{
-					// ignored
-				}
+		public async Task LoadCached()
+		{
+			_hasStarted = true;
+			if(!CacheExists)
+				throw new InvalidOperationException("Cache file doesn't exists!");
+			Data = await FactorioData.LoadFromCache(CachePath);
+			OnLoadingCompleted();
 		}
 
 		[PublicAPI]
-		public void Start()
+		public async void Start()
 		{
+			_hasStarted = true;
 			// ReSharper disable VariableHidesOuterVariable
 			void DefineSettings(dynamic raw, dynamic settingsStartup, dynamic settingsGlobal, dynamic settingsPlayer, string settingType)
 				// ReSharper restore VariableHidesOuterVariable
 			{
-				foreach (var setting in ((Table)raw[settingType]).Values.Select(x => x.Table))
-				{
-					if (setting != null)
+				var settings = raw[settingType];
+				if(settings != null)
+					foreach (var setting in ((Table)raw[settingType]).Values.Select(x => x.Table))
 					{
-						var name = setting["name"];
-						if ((string) setting["setting_type"] == "startup")
-							settingsStartup[name] = new Table(Lua)
-							{
-								["value"] = setting["default_value"]
-							};
-						else if ((string) setting["setting_type"] == "runtime-global")
-							settingsGlobal[name] = new Table(Lua)
-							{
-								["value"] = setting["default_value"]
-							};
-						else if ((string) setting["settings_type"] == "runtime-per-user")
-							settingsPlayer[name] = new Table(Lua)
-							{
-								["value"] = setting["default_value"]
-							};
+						if (setting != null)
+						{
+							var name = setting["name"];
+							if ((string) setting["setting_type"] == "startup")
+								settingsStartup[name] = new Table(_lua)
+								{
+									["value"] = setting["default_value"]
+								};
+							else if ((string) setting["setting_type"] == "runtime-global")
+								settingsGlobal[name] = new Table(_lua)
+								{
+									["value"] = setting["default_value"]
+								};
+							else if ((string) setting["settings_type"] == "runtime-per-user")
+								settingsPlayer[name] = new Table(_lua)
+								{
+									["value"] = setting["default_value"]
+								};
+						}
 					}
-				}
 			}
 
-			void DoStage(Func<IModule, string?> stageFileCaller)
+			Task DoStage(Func<IModule, string?> stageFileCaller)
 			{
-				foreach (var mod in ActiveModules)
+				return Task.Factory.StartNew(() =>
 				{
-					var fileName = stageFileCaller(mod);
-					if (fileName == null)
-						continue;
-					OnModuleFileLoading(new ModuleFileEventArgs(mod, fileName));
-					ClearModules();
-					Lua.DoStream(_loader.Load(fileName), Lua.Globals, fileName);
-				}
+					foreach (var mod in ActiveModules)
+					{
+						var fileName = stageFileCaller(mod);
+						if (fileName == null)
+							continue;
+						OnModuleFileLoading(new ModuleFileEventArgs(mod, fileName));
+						ClearModules();
+						_lua.DoStream(_loader.Load(fileName), _lua.Globals, fileName);
+					}
+				});
 			}
 
 			void ClearModules()
 			{
-				((dynamic)Lua.Globals["package"])["loaded"] = new Table(Lua);
+				((dynamic)_lua.Globals["package"])["loaded"] = new Table(_lua);
 			}
 
 			void ResolveDependencies()
@@ -220,57 +278,70 @@ namespace FactorioModLoader
 				}
 			}
 
-			ResolveDependencies();
-			CheckDependencies();
-
-			var table = new Table(Lua);
-			foreach (var mod in _activeModules)
-				table[mod.Name] = new Table(Lua);
-			Lua.Globals["mods"] = table;
-
-			OnSettingsStage(new StageEventArgs(Lua));
-			DoStage(mod => mod.Settings);
-
-			OnSettingsUpdatesStage(new StageEventArgs(Lua));
-			DoStage(mod => mod.SettingsUpdates);
-
-			OnSettingsFinalFixesStage(new StageEventArgs(Lua));
-			DoStage(mod => mod.SettingsFinalFixes);
-
-			var data = (dynamic) Lua.Globals["data"];
-			var raw = data["raw"];
-			var settings = (dynamic)(Lua.Globals["settings"] = new Table(Lua));
-			var global = settings["global"] = new Table(Lua);
-			var startup = settings["startup"] = new Table(Lua);
-			var player = settings["player"] = new Table(Lua);
-			DefineSettings(raw, startup, global, player, "bool-setting");
-			DefineSettings(raw, startup, global, player, "int-setting");
-			DefineSettings(raw, startup, global, player, "double-setting");
-			DefineSettings(raw, startup, global, player, "string-setting");
-
-			OnDataStage(new StageEventArgs(Lua));
-			DoStage(mod => mod.Data);
-			var technologies = (Table)((dynamic) Lua.Globals)["data"]["raw"]["technology"];
-			foreach (var technology in technologies.Values)
+			try
 			{
-				if (technology == null)
-					continue;
-				technology.Table["prerequisites"] ??= new Table(Lua);
+				ResolveDependencies();
+				CheckDependencies();
+
+				var table = new Table(_lua);
+				foreach (var mod in _activeModules)
+					table[mod.Name] = new Table(_lua);
+				_lua.Globals["mods"] = table;
+
+				OnSettingsStage(new StageEventArgs(_lua));
+				await DoStage(mod => mod.Settings);
+
+				OnSettingsUpdatesStage(new StageEventArgs(_lua));
+				await DoStage(mod => mod.SettingsUpdates);
+
+				OnSettingsFinalFixesStage(new StageEventArgs(_lua));
+				await DoStage(mod => mod.SettingsFinalFixes);
+
+				var data = (dynamic) _lua.Globals["data"];
+				if (data["raw"] == null)
+					data["raw"] = new Table(_lua);
+				var raw = data["raw"];
+				var settings = (dynamic) (_lua.Globals["settings"] = new Table(_lua));
+				var global = settings["global"] = new Table(_lua);
+				var startup = settings["startup"] = new Table(_lua);
+				var player = settings["player"] = new Table(_lua);
+				DefineSettings(raw, startup, global, player, "bool-setting");
+				DefineSettings(raw, startup, global, player, "int-setting");
+				DefineSettings(raw, startup, global, player, "double-setting");
+				DefineSettings(raw, startup, global, player, "string-setting");
+
+				OnDataStage(new StageEventArgs(_lua));
+				await DoStage(mod => mod.Data);
+				var technologies = (Table) ((dynamic) _lua.Globals)["data"]["raw"]["technology"];
+				foreach (var technology in technologies.Values)
+				{
+					if (technology == null)
+						continue;
+					technology.Table["prerequisites"] ??= new Table(_lua);
+				}
+
+				OnDataUpdatesStage(new StageEventArgs(_lua));
+				await DoStage(mod => mod.DataUpdates);
+
+				OnDataFinalFixesStage(new StageEventArgs(_lua));
+				await DoStage(mod => mod.DataFinalFixes);
+
+				var fData = new FactorioData((Table) _lua.Globals["data"]);
+				await fData.Save(CachePath);
+				Data = fData;
+				OnLoadingCompleted();
 			}
-
-			OnDataUpdatesStage(new StageEventArgs(Lua));
-			DoStage(mod => mod.DataUpdates);
-
-			OnDataFinalFixesStage(new StageEventArgs(Lua));
-			DoStage(mod => mod.DataFinalFixes);
-
-			Data = new FactorioData((Table)Lua.Globals["data"]);
-			Data.Save(CachePath);
-			OnLoadingCompleted();
+			catch(Exception e)
+			{
+				OnLoadingError(e.Message);
+				throw;
+			}
 		}
 		[PublicAPI]
 		public void LoadModList()
 		{
+			if(_hasStarted)
+				throw new InvalidOperationException("Can't load mod-list.json after FactorioEmulator.Start() invocation!");
 			var modListPath = Path.Combine(ModsDirectory, "mod-list.json");
 			if (!File.Exists(modListPath))
 				return;
@@ -306,19 +377,34 @@ namespace FactorioModLoader
 		[PublicAPI]
 		public bool ActivateModule(IModule module)
 		{
+			if (_hasStarted)
+				throw new InvalidOperationException("Can't activate module after FactorioEmulator.Start() invocation!");
 			if (_activeModules.Any(x => x.Name.Equals(module.Name) || x.Dependencies.Any(dep => dep.IncompatibleWith(module))))
 				return false;
 			_activeModules.Add(module);
 			_loader.Register(module);
+			OnModuleActivated(module);
 			return true;
 		}
 		[PublicAPI]
 		public bool DeactivateModule(IModule module)
 		{
+			if (_hasStarted)
+				throw new InvalidOperationException("Can't deactivate module after FactorioEmulator.Start() invocation!");
 			if (!_activeModules.Contains(module))
 				return false;
 			_activeModules.Remove(module);
+			_loader.Unregister(module);
+			OnModuleDeactivated(module);
 			return true;
+		}
+		public Stream? LoadFile(string path)
+		{
+			var modname = _loader.ResolveModuleName(path, _lua.Globals);
+			var filename = _loader.ResolveFileName(modname, _lua.Globals);
+			if (filename != null)
+				return _loader.Load(filename);
+			return null;
 		}
 
 		private DynValue Breakpoint(ScriptExecutionContext context, CallbackArguments args)
@@ -335,42 +421,100 @@ namespace FactorioModLoader
 
 		protected virtual void OnSettingsStage(StageEventArgs args)
 		{
-			SettingsStage?.Invoke(this, args);
+			try
+			{
+				SettingsStage?.Invoke(this, args);
+			}
+			catch { /**/ }
 		}
 
 		protected virtual void OnSettingsUpdatesStage(StageEventArgs args)
 		{
-			SettingsUpdatesStage?.Invoke(this, args);
+			try
+			{
+				SettingsUpdatesStage?.Invoke(this, args);
+			}
+			catch { /**/ }
 		}
 
 		protected virtual void OnSettingsFinalFixesStage(StageEventArgs args)
 		{
-			SettingsFinalFixesStage?.Invoke(this, args);
+			try
+			{
+				SettingsFinalFixesStage?.Invoke(this, args);
+			}
+			catch { /**/ }
 		}
 
 		protected virtual void OnDataStage(StageEventArgs args)
 		{
-			DataStage?.Invoke(this, args);
+			try
+			{
+				DataStage?.Invoke(this, args);
+			}
+			catch { /**/ }
 		}
 
 		protected virtual void OnDataUpdatesStage(StageEventArgs args)
 		{
-			DataUpdatesStage?.Invoke(this, args);
+			try
+			{
+				DataUpdatesStage?.Invoke(this, args);
+			}
+			catch { /**/ }
 		}
 
 		protected virtual void OnDataFinalFixesStage(StageEventArgs args)
 		{
-			DataFinalFixesStage?.Invoke(this, args);
+			try
+			{
+				DataFinalFixesStage?.Invoke(this, args);
+			}
+			catch { /**/ }
 		}
 
 		protected virtual void OnLoadingCompleted()
 		{
-			LoadingCompleted?.Invoke(this, EventArgs.Empty);
+			try
+			{
+				LoadingCompleted?.Invoke(this, EventArgs.Empty);
+			}
+			catch { /**/ }
 		}
 
 		protected virtual void OnModuleFileLoading(ModuleFileEventArgs args)
 		{
-			ModuleFileLoading?.Invoke(this, args);
+			try
+			{
+				ModuleFileLoading?.Invoke(this, args);
+			}
+			catch { /**/ }
+		}
+
+		protected virtual void OnModuleActivated(IModule module)
+		{
+			try
+			{
+				ModuleActivated?.Invoke(this, new ModuleEventArgs(module));
+			}
+			catch { /**/ }
+}
+		protected virtual void OnModuleDeactivated(IModule module)
+		{
+			try
+			{
+				ModuleDeactivated?.Invoke(this, new ModuleEventArgs(module));
+			}
+			catch { /**/ }
+		}
+
+		protected virtual void OnLoadingError(string error)
+		{
+			try
+			{
+				LoadingError?.Invoke(this, new LoadingErrorEventArgs(error));
+			}
+			catch { /**/ }
 		}
 	}
 }

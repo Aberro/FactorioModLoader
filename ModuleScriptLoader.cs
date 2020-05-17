@@ -23,6 +23,11 @@ namespace FactorioModLoader
 				_core = module;
 		}
 
+		public void Unregister(IModule module)
+		{
+			_modules.Remove(module);
+		}
+
 		public Stream Load(string fileName)
 		{
 			var match = ModNameRegex.Match(fileName);

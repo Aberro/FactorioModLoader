@@ -11,7 +11,7 @@ namespace FactorioModLoader.Prototypes
 	{
 		public IList<IIconData> Icons { get; }
 		[PublicAPI]
-		public IconSpecification([PublicAPI]string propertyName, dynamic container)
+		public IconSpecification([UsedImplicitly]string propertyName, dynamic container)
 		{
 			if (container is IDictionary<string, object> dic)
 			{
