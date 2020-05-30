@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -11,7 +12,7 @@ namespace FactorioModLoader.Prototypes
 		public float R { get; }
 		public float G { get; }
 		public float B { get; }
-		public float A { get; }
+		public float A { get; } = 1;
 		public Color(dynamic data)
 		{
 			if (data is IDictionary<string, object> named)

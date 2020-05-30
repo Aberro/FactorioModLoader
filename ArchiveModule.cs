@@ -1,8 +1,10 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Threading.Tasks;
 using Utf8Json;
 
 namespace FactorioModLoader
@@ -43,7 +45,10 @@ namespace FactorioModLoader
 			Homepage = info.ContainsKey("homepage") ? info["homepage"] : "";
 			Dependencies = LoadDependencies(info);
 
-			foreach (var entry in archive.Entries.Where(x => Path.GetExtension(x.Name) == ".lua"))
+			var extensions = new[] { ".lua", ".cfg", ".png", ".jpg" };
+			var thumbnailPath = Path.Combine(mainDirectoryName, "thumbnail.png").Replace(Path.DirectorySeparatorChar, '/');
+			var thumbnail = archive.GetEntry(thumbnailPath);
+			foreach (var entry in archive.Entries.Where(x => extensions.Contains(Path.GetExtension(x.Name))))
 			{
 				var name = entry.FullName;
 				var idx = name.IndexOf(mainDirectoryName, StringComparison.InvariantCultureIgnoreCase);
@@ -52,16 +57,39 @@ namespace FactorioModLoader
 				entry.Open().CopyTo(stream);
 				stream.Position = 0;
 				_cache.Add(name, stream);
+				if (entry.FullName == thumbnail.FullName)
+					Thumbnail = name;
 			}
+		}
+
+		protected override IEnumerable<(string Locale, Stream File)> LoadLocalizationFiles()
+		{
+			var localePath = $"__{Name}__/locale/";
+			foreach (var pair in _cache)
+				if (pair.Key.StartsWith(localePath))
+				{
+					var locale = pair.Key.Substring(localePath.Length).Split('/')[0];
+					if (string.IsNullOrWhiteSpace(locale))
+						throw new ApplicationException();
+					yield return (locale, pair.Value);
+				}
 		}
 
 		protected override IEnumerable<string> FileNamesCache => _cache.Keys;
 		public override string Name { get; }
 		public override Version Version { get; }
 		public override IEnumerable<Dependency> Dependencies { get; }
-		public override Stream Load(string fileName)
+		public override Stream? Load(string fileName)
 		{
-			return _cache[fileName];
+			if (_cache.TryGetValue(fileName, out var result))
+				return result;
+			return null;
+		}
+		public override Task<Stream?> LoadAsync(string fileName)
+		{
+			if (_cache.TryGetValue(fileName, out var result))
+				return Task.FromResult((Stream?)result);
+			return Task.FromResult((Stream?)null);
 		}
 	}
 }

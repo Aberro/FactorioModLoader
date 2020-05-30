@@ -1,4 +1,5 @@
-﻿using MoonSharp.Interpreter;
+﻿#nullable enable
+using MoonSharp.Interpreter;
 // ReSharper disable StringLiteralTypo
 
 namespace FactorioModLoader

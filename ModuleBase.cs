@@ -1,10 +1,12 @@
 ﻿#nullable enable
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace FactorioModLoader
 {
@@ -27,7 +29,69 @@ namespace FactorioModLoader
 		public string? Author { get; protected set; }
 		public string? Homepage { get; protected set; }
 		public abstract IEnumerable<Dependency> Dependencies { get; }
-		public abstract Stream Load(string fileName);
+		public abstract Stream? Load(string fileName);
+		public abstract Task<Stream?> LoadAsync(string fileName);
+		public async Task LoadLocalizations(IDictionary<string, IDictionary<string, IDictionary<string, string>>> localizations)
+		{
+			foreach (var localization in LoadLocalizationFiles())
+			{
+				using var reader = new StreamReader(localization.File);
+				string? line;
+				ConcurrentDictionary<string, IDictionary<string, string>> currentGroup;
+				{
+					if (!localizations.TryGetValue("", out var group))
+					{
+						currentGroup = new ConcurrentDictionary<string, IDictionary<string, string>>();
+						if (!localizations.TryAdd("", currentGroup))
+							currentGroup = (ConcurrentDictionary<string, IDictionary<string, string>>) localizations[""];
+					}
+					else
+						currentGroup = (ConcurrentDictionary<string, IDictionary<string, string>>) group;
+				}
+
+				do
+				{
+					line = await reader.ReadLineAsync();
+					if (line == null) break;
+					if(string.IsNullOrWhiteSpace(line)) continue;
+					var firstChar = line.Trim()[0];
+					if (firstChar == '#' || firstChar == ';') continue;
+					if (firstChar == '[')
+					{
+						var groupName = line.Trim(' ', '\t', '[', ']');
+						if (!localizations.TryGetValue(groupName, out var group))
+						{
+							currentGroup = new ConcurrentDictionary<string, IDictionary<string, string>>();
+							if (!localizations.TryAdd(groupName, currentGroup))
+								currentGroup = (ConcurrentDictionary<string, IDictionary<string, string>>) localizations[groupName];
+						}
+						else
+							currentGroup = (ConcurrentDictionary<string, IDictionary<string, string>>)group;
+
+						continue;
+					}
+
+					var idx = line.IndexOf('=');
+					if(idx < 0)
+						throw new FormatException("Invalid localization file format!");
+					var key = line.Substring(0, idx);
+					var value = line.Substring(idx+1);
+					if (!currentGroup.TryGetValue(key, out var keys))
+					{
+						keys = new ConcurrentDictionary<string, string>();
+						if (!currentGroup.TryAdd(key, keys))
+							keys = currentGroup[key];
+					}
+
+					if(!keys.TryAdd(localization.Locale, value))
+						keys[localization.Locale] = value;
+				} while (line != null);
+				// We don't need to wait for task completion
+				_ = localization.File.DisposeAsync();
+			}
+		}
+
+		protected abstract IEnumerable<(string Locale, Stream File)> LoadLocalizationFiles();
 
 		[return: NotNullIfNotNull("moduleName")]
 		public string? ResolveModuleName(string? moduleName)

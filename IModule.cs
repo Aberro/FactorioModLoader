@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using JetBrains.Annotations;
+using System.Threading.Tasks;
 
 namespace FactorioModLoader
 {
@@ -25,6 +25,8 @@ namespace FactorioModLoader
 		IEnumerable<Dependency> Dependencies { get; }
 		string? ResolveModuleName(string? moduleName);
 		string? ResolveFileName(string? moduleName);
-		Stream Load(string fileName);
+		Stream? Load(string fileName);
+		Task<Stream?> LoadAsync(string fileName);
+		Task LoadLocalizations(IDictionary<string, IDictionary<string, IDictionary<string, string>>> localizations);
 	}
 }

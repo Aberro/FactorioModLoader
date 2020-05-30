@@ -28,6 +28,29 @@ namespace FactorioModLoader
 		public IDictionary<string, IFluid> Fluids { get; private set; } = null!;
 		[PublicAPI]
 		public IDictionary<string, IItem> Items { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, ITool> Tools { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IArmor> Armor { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IRepairTool> RepairTools { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IMiningTool> MiningTools { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, Prototypes.IModule> Modules { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, ICapsule> Capsules { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IAmmoItem> Ammo { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IGun> Guns { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IItem> Rail { get; private set; } = null!;
+		public IDictionary<string, IItem> SelectionTools { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IItem> ItemWithEntityData { get; private set; } = null!;
+		// This is internal for caching purpose
+		internal IDictionary<string, IDictionary<string, IDictionary<string, string>>>? Localizations { get; set; }
 
 		internal FactorioData(Table data)
 		{
@@ -47,6 +70,22 @@ namespace FactorioModLoader
 		private FactorioData(dynamic data)
 		{
 			Data = LoadTable(data);
+			if (((IDictionary<string, object>) data).TryGetValue("__localizations", out var loc))
+			{
+				Localizations = new Dictionary<string, IDictionary<string, IDictionary<string, string>>>();
+				foreach (var pair in (IDictionary<string, object>) loc)
+				{
+					var group = new Dictionary<string, IDictionary<string, string>>();
+					Localizations.Add(pair.Key, group);
+					foreach (var pair1 in (IDictionary<string, object>)pair.Value)
+					{
+						var keys = new Dictionary<string, string>();
+						group.Add(pair1.Key, keys);
+						foreach(var pair2 in (IDictionary<string, object>)pair1.Value)
+							keys.Add(pair2.Key, (string)pair2.Value);
+					}
+				}
+			}
 			FromCache = true;
 			LoadRepositories();
 		}
@@ -55,17 +94,31 @@ namespace FactorioModLoader
 		{
 			var data = (IDictionary<string, object>) Data;
 			var raw = (IDictionary<string, object>)data["raw"];
-			Technology = _loader.LoadRepository<ITechnology>("data.raw.technology", raw["technology"]);
-			Recipe = _loader.LoadRepository<IRecipe>("data.raw.recipe", raw["recipe"]);
 			Fluids = _loader.LoadRepository<IFluid>("data.raw.fluid", raw["fluid"]);
 			Items = _loader.LoadRepository<IItem>("data.raw.item", raw["item"]);
+			Tools = _loader.LoadRepository<ITool>("data.raw.tool", raw["tool"]);
+			Armor = _loader.LoadRepository<IArmor>("data.raw.armor", raw["armor"]);
+			Guns = _loader.LoadRepository<IGun>("data.raw.gun", raw["gun"]);
+			Ammo = _loader.LoadRepository<IAmmoItem>("data.raw.ammo", raw["ammo"]);
+			Capsules = _loader.LoadRepository<ICapsule>("data.raw.capsule", raw["capsule"]);
+			Modules = _loader.LoadRepository<Prototypes.IModule>("data.raw.module", raw["module"]);
+			MiningTools = _loader.LoadRepository<IMiningTool>("data.raw.mining-tool", raw["mining-tool"]);
+			RepairTools = _loader.LoadRepository<IRepairTool>("data.raw.repair-tool", raw["repair-tool"]);
+			Rail = _loader.LoadRepository<IItem>("data.raw.rail-planner", raw["rail-planner"]);
+			ItemWithEntityData = _loader.LoadRepository<IItem>("data.raw.item-with-entity-data", raw["item-with-entity-data"]);
+			SelectionTools = _loader.LoadRepository<IItem>("data.raw.selection-tool", raw["selection-tool"]);
+			Technology = _loader.LoadRepository<ITechnology>("data.raw.technology", raw["technology"]);
+			Recipe = _loader.LoadRepository<IRecipe>("data.raw.recipe", raw["recipe"]);
 		}
+
 		public Task Save(string path)
 		{
 			var dir = Path.GetDirectoryName(path) ?? "";
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
 			using var fileStream = File.Open(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+			if(Localizations != null)
+				((IDictionary<string, object>)Data)["__localizations"] = Localizations;
 			return JsonSerializer.SerializeAsync<dynamic>(fileStream, Data);
 		}
 

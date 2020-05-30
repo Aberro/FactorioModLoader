@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using JetBrains.Annotations;
 
 namespace FactorioModLoader
@@ -32,7 +33,7 @@ namespace FactorioModLoader
 	/// Used to notify dynamic proxy interceptor that instances of this class stored in repository and values of this type could be strings used as a key in such repository.
 	/// </summary>
 	[PublicAPI]
-	[AttributeUsage(AttributeTargets.Interface)]
+	[AttributeUsage(AttributeTargets.Interface, AllowMultiple = true)]
 	public class RepositoryAttribute : Attribute
 	{
 		public string RepositoryPath { get; }
@@ -75,11 +76,11 @@ namespace FactorioModLoader
 	/// </summary>
 	[PublicAPI]
 	[AttributeUsage(AttributeTargets.Property)]
-	public class AsSingular : Attribute
+	public class AsSingularAttribute : Attribute
 	{
 		public string SingularName { get; }
 
-		public AsSingular(string singularName)
+		public AsSingularAttribute(string singularName)
 		{
 			SingularName = singularName;
 		}
@@ -89,10 +90,10 @@ namespace FactorioModLoader
 	/// </summary>
 	[PublicAPI]
 	[AttributeUsage(AttributeTargets.Property)]
-	public class Indexed : Attribute
+	public class IndexedAttribute : Attribute
 	{
 		public uint Index { get; }
-		public Indexed(uint index)
+		public IndexedAttribute(uint index)
 		{
 			Index = index;
 		}

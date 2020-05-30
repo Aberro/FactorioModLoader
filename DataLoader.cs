@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -32,12 +33,12 @@ namespace FactorioModLoader
 			return result;
 		}
 
-		public object TryGetFromRepository(string repositoryPath, string key)
+		public object? TryGetFromRepository(string repositoryPath, string key)
 		{
 			_repositories.TryGetValue(repositoryPath, out var repo);
 			if (repo == null) throw new ArgumentException("Repository not found!", nameof(repositoryPath));
 			var dic = (IDictionary) repo;
-			return dic[key] ?? throw new ApplicationException();
+			return dic[key];
 		}
 
 		public object ProxyValue(Type returnType, object value)
@@ -50,47 +51,42 @@ namespace FactorioModLoader
 			{
 				Current = this;
 				// Interface
-				if (returnType.IsInterface)
+				if (returnType.IsInterface && (returnType.GetInterface("IEnumerable") != null || returnType.GetInterface("IList") != null))
 				{
-					if (returnType.GetInterface("IEnumerable") != null || returnType.GetInterface("IList") != null)
+					dynamic result = typeof(List<>).MakeGenericType(returnType.GenericTypeArguments)
+										 .GetConstructor(new Type[0])?.Invoke(new object?[0]) ??
+									 throw new ApplicationException();
+					if (!(value is IList<object> list))
 					{
-						dynamic result = typeof(List<>).MakeGenericType(returnType.GenericTypeArguments)
-											 .GetConstructor(new Type[0])?.Invoke(new object?[0]) ??
-										 throw new ApplicationException();
-						if (!(value is IList<object> list))
-						{
-							if (property != null && property.GetCustomAttribute<AsSingular>() != null)
-								result.Add(ProxyValue(returnType.GenericTypeArguments[0], value, property));
-							else
-								throw new ApplicationException("Array expected!");
-						}
+						if (property != null && property.GetCustomAttribute<AsSingularAttribute>() != null)
+							result.Add(ProxyValue(returnType.GenericTypeArguments[0], value, property));
 						else
-						{
-							foreach (var item in list)
-							{
-								var val = ProxyValue(returnType.GenericTypeArguments[0], item);
-								result.Add((dynamic) val);
-							}
-						}
-
-						return result;
+							throw new ApplicationException("Array expected!");
 					}
-
-					if (!(value is string))
+					else
 					{
-						return _generator.CreateInterfaceProxyWithoutTarget(returnType,
-							new Interceptor(this, value));
+						foreach (var item in list)
+						{
+							var val = ProxyValue(returnType.GenericTypeArguments[0], item);
+							result.Add((dynamic) val);
+						}
 					}
+
+					return result;
 				}
 
-				if (value is string)
+				if (value is string s)
 				{
-					var repository = returnType.GetCustomAttribute<RepositoryAttribute>();
-					if (repository != null)
+					var repositories = returnType.GetCustomAttributes<RepositoryAttribute>().ToArray();
+					if (repositories != null && repositories.Any())
 					{
-						var obj = TryGetFromRepository(repository.RepositoryPath, (string) value);
-						if (obj != null)
-							return obj;
+						foreach (var repository in repositories)
+						{
+							var obj = TryGetFromRepository(repository.RepositoryPath, s);
+							if (obj != null)
+								return obj;
+						}
+						throw new ApplicationException($"Object with key '{s}' not found in repository!");
 					}
 				}
 
@@ -105,6 +101,12 @@ namespace FactorioModLoader
 					}
 					else
 						throw new ApplicationException("Builder's Build() method not found!");
+				}
+
+				if (returnType.IsInterface && !(value is string))
+				{
+					return _generator.CreateInterfaceProxyWithoutTarget(returnType,
+						new Interceptor(this, value));
 				}
 
 				if (returnType.IsAbstract)
@@ -173,13 +175,13 @@ namespace FactorioModLoader
 				if (!methodName.StartsWith("get_"))
 					throw new ApplicationException("Only property reading is supported!");
 				var propertyName = methodName.Substring(4);
-				var dic = (IDictionary<string, object>)_data;
-				result = ResolveValue(propertyName, invocation.Method.ReturnType, invocation.Proxy, dic);
+				//var dic = (IDictionary<string, object>)_data;
+				result = ResolveValue(propertyName, invocation.Method.ReturnType, invocation.Proxy, _data);
 				_cache.Add(invocation.Method, result);
 				invocation.ReturnValue = result;
 			}
 
-			private object? ResolveValue(string propertyName, Type returnType, object proxy, IDictionary<string, object> dic)
+			private object? ResolveValue(string propertyName, Type returnType, object proxy, dynamic data)
 			{
 				if (returnType.GetCustomAttribute<InitializeByContainer>() != null)
 				{
@@ -212,24 +214,42 @@ namespace FactorioModLoader
 					return accessorMethod.Invoke(null, new[] { proxy, _data });
 				}
 
-				var key = TryGetKey(property, propertyName, dic);
-				if (key != null)
+				var indexed = property.GetCustomAttribute<IndexedAttribute>();
+				if (indexed != null && data is IList<object> list)
 				{
-					var result = _loader.ProxyValue(returnType, dic[key], property);
+					if(list.Count <= indexed.Index)
+						throw new ApplicationException("Property index is out of bounds!");
+					var result = _loader.ProxyValue(returnType, list[(int)indexed.Index], property);
 					if (result is ExpandoObject)
 						throw new ApplicationException("Cant proxy value!");
 					return result;
 				}
 
-				var attr = property.GetCustomAttribute<DefaultValueAttribute>();
-				if (attr != null)
+				if (data is IDictionary<string, object> dic)
 				{
-					var result = attr.Value;
-					if(result == null)
-						throw new ApplicationException("Default value can't be null! (Leave property as nullable reference type instead)");
-					if (result is IConvertible convertible)
-						return convertible.ToType(returnType, CultureInfo.InvariantCulture);
-					return result;
+					var key = TryGetKey(property, propertyName, dic);
+					if (key != null)
+					{
+						var val = dic[key];
+						if (val == null)
+							return null;
+						var result = _loader.ProxyValue(returnType, dic[key], property);
+						if (result is ExpandoObject)
+							throw new ApplicationException("Cant proxy value!");
+						return result;
+					}
+
+					var attr = property.GetCustomAttribute<DefaultValueAttribute>();
+					if (attr != null)
+					{
+						var result = attr.Value;
+						if (result == null)
+							throw new ApplicationException(
+								"Default value can't be null! (Leave property as nullable reference type instead)");
+						if (result is IConvertible convertible)
+							return convertible.ToType(returnType, CultureInfo.InvariantCulture);
+						return result;
+					}
 				}
 
 				if (IsNullable(property.DeclaringType, property)) return null;
@@ -243,7 +263,7 @@ namespace FactorioModLoader
 					propertyName, FormatPropertyName(propertyName, '-'), FormatPropertyName(propertyName, '_')
 				};
 				var aliasAttr = property.GetCustomAttribute<AliasAttribute>(true);
-				var singularAttr = property.GetCustomAttribute<AsSingular>(true);
+				var singularAttr = property.GetCustomAttribute<AsSingularAttribute>(true);
 				if (aliasAttr != null)
 					aliases.AddRange(aliasAttr.Aliases);
 				if(singularAttr != null)

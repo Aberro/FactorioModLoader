@@ -1,7 +1,9 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Utf8Json;
 
 namespace FactorioModLoader
@@ -30,7 +32,7 @@ namespace FactorioModLoader
 			Dependencies = LoadDependencies(info);
 
 			var directoryInfo = new DirectoryInfo(path);
-			var extensions = new[] {".lua", ".png", ".jpg"};
+			var extensions = new[] {".lua", ".cfg", ".png", ".jpg"};
 			var thumbnail = directoryInfo.GetFiles("thumbnail.*", SearchOption.TopDirectoryOnly).FirstOrDefault();
 			foreach (var file in directoryInfo.EnumerateFiles("*", SearchOption.AllDirectories).Where(file => extensions.Contains(file.Extension)))
 			{
@@ -43,13 +45,34 @@ namespace FactorioModLoader
 			}
 		}
 
+		protected override IEnumerable<(string Locale, Stream File)> LoadLocalizationFiles()
+		{
+			var localePath = $"__{Name}__/locale/";
+			foreach (var pair in _cache)
+				if (pair.Key.StartsWith(localePath))
+				{
+					var locale = pair.Key.Substring(localePath.Length).Split('/')[0];
+					if (string.IsNullOrWhiteSpace(locale))
+						throw new ApplicationException();
+					yield return (locale, File.OpenRead(pair.Value));
+				}
+		}
+
 		protected override IEnumerable<string> FileNamesCache => _cache.Keys;
 		public override string Name { get; }
 		public override Version Version { get; }
 		public override IEnumerable<Dependency> Dependencies { get; }
-		public override Stream Load(string fileName)
+		public override Stream? Load(string fileName)
 		{
-			return File.Open(_cache[fileName], FileMode.Open, FileAccess.Read, FileShare.Read);
+			if (_cache.TryGetValue(fileName, out var result))
+				return File.Open(result, FileMode.Open, FileAccess.Read, FileShare.Read);
+			return null;
+		}
+		public override Task<Stream?> LoadAsync(string fileName)
+		{
+			if (_cache.TryGetValue(fileName, out var result))
+				return Task.Run(() => (Stream?)File.Open(result, FileMode.Open, FileAccess.Read, FileShare.Read));
+			return Task.FromResult((Stream?)null);
 		}
 	}
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -113,12 +114,8 @@ namespace FactorioModLoader
 				if (versionRequirement)
 				{
 					if (Module == null)
-					{
 						Module = dependee;
-						return;
-					}
-					else
-						throw new ApplicationException("Module already resolved!");
+					return;
 				}
 			}
 			throw new ArgumentException("Invalid module!", nameof(dependee));

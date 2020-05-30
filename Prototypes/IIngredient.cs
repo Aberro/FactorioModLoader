@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿#nullable enable
+using System.ComponentModel;
 using JetBrains.Annotations;
 
 namespace FactorioModLoader.Prototypes
@@ -51,5 +52,16 @@ namespace FactorioModLoader.Prototypes
 		[PublicAPI]
 		[DefaultValue(0)]
 		uint FluidboxIndex { get; }
+	}
+
+	public interface IToolIngredient : IIngredient
+	{
+		[PublicAPI]
+		[Indexed(0)]
+		public ITool Item { get; }
+
+		[PublicAPI]
+		[Indexed(1)]
+		public ushort Amount { get; }
 	}
 }

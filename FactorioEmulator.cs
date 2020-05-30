@@ -1,9 +1,12 @@
 ﻿#nullable enable
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using FactorioModLoader.Prototypes;
 using JetBrains.Annotations;
 using MoonSharp.Interpreter;
 using Utf8Json;
@@ -13,6 +16,10 @@ namespace FactorioModLoader
 	[PublicAPI]
 	public class FactorioEmulator
 	{
+		private static readonly Regex LocalizationParameterRegex = new Regex("__((?<num>\\d*)|((?<group>\\w+)__(?<key>[-\\w]+)))__");
+
+		private IDictionary<string, IDictionary<string, IDictionary<string, string>>> _localizations =
+			new ConcurrentDictionary<string, IDictionary<string, IDictionary<string, string>>>();
 		private List<IModule> _activeModules;
 		private readonly List<IModule> _availableModules;
 		private readonly ModuleScriptLoader _loader;
@@ -65,7 +72,7 @@ namespace FactorioModLoader
 		[PublicAPI]
 		public event EventHandler? LoadingCompleted;
 		[PublicAPI]
-		public event EventHandler? LoadingError;
+		public event LoadingErrorEventHandler? LoadingError;
 		[PublicAPI]
 		public event ModuleFileEventHandler? ModuleFileLoading;
 		[PublicAPI]
@@ -144,8 +151,10 @@ namespace FactorioModLoader
 			_availableModules.Add(baseMod);
 			_activeModules.Add(coreMod);
 			_activeModules.Add(baseMod);
+			// ReSharper disable once StringLiteralTypo
 			var dataLoader = "__core__/lualib/dataloader.lua";
-			_lua.DoStream(_loader.Load(dataLoader), _lua.Globals, dataLoader);
+			var stream = _loader.Load(dataLoader);
+			_lua.DoStream(stream, _lua.Globals, dataLoader);
 		}
 
 		public async Task LoadCached()
@@ -153,8 +162,17 @@ namespace FactorioModLoader
 			_hasStarted = true;
 			if(!CacheExists)
 				throw new InvalidOperationException("Cache file doesn't exists!");
-			Data = await FactorioData.LoadFromCache(CachePath);
-			OnLoadingCompleted();
+			try
+			{
+				Data = await FactorioData.LoadFromCache(CachePath);
+				_localizations = Data.Localizations ?? throw new ApplicationException("Cached data has no localization information!");
+				OnLoadingCompleted();
+			}
+			catch (Exception e)
+			{
+				OnLoadingError(e.Message);
+				_hasStarted = false;
+			}
 		}
 
 		[PublicAPI]
@@ -283,6 +301,9 @@ namespace FactorioModLoader
 				ResolveDependencies();
 				CheckDependencies();
 
+				foreach (var mod in _activeModules)
+					_ = Task.Run(() => mod.LoadLocalizations(_localizations));
+
 				var table = new Table(_lua);
 				foreach (var mod in _activeModules)
 					table[mod.Name] = new Table(_lua);
@@ -326,7 +347,8 @@ namespace FactorioModLoader
 				OnDataFinalFixesStage(new StageEventArgs(_lua));
 				await DoStage(mod => mod.DataFinalFixes);
 
-				var fData = new FactorioData((Table) _lua.Globals["data"]);
+				// We don't want to assign Data value before LoadingCompleted event, so use temporary variable
+				var fData = new FactorioData((Table) _lua.Globals["data"]) {Localizations = _localizations};
 				await fData.Save(CachePath);
 				Data = fData;
 				OnLoadingCompleted();
@@ -334,7 +356,7 @@ namespace FactorioModLoader
 			catch(Exception e)
 			{
 				OnLoadingError(e.Message);
-				throw;
+				_hasStarted = false;
 			}
 		}
 		[PublicAPI]
@@ -398,13 +420,77 @@ namespace FactorioModLoader
 			OnModuleDeactivated(module);
 			return true;
 		}
-		public Stream? LoadFile(string path)
+		public Task<Stream?> LoadFile(string path)
 		{
-			var modname = _loader.ResolveModuleName(path, _lua.Globals);
-			var filename = _loader.ResolveFileName(modname, _lua.Globals);
-			if (filename != null)
-				return _loader.Load(filename);
-			return null;
+			if (path != null)
+				return _loader.LoadAsync(path);
+			return Task.FromResult((Stream?)null);
+		}
+		[PublicAPI]
+		public string LocalizeString(string locale, LocalizedString str, params object[] args)
+		{
+			if (!TryLocalizeString(locale, str, out var result, args))
+				return str.Key;
+			return result;
+		}
+		[PublicAPI]
+		public bool TryLocalizeString(string locale, LocalizedString str, out string result, params object[] args)
+		{
+			bool ParametrizeLocalizedString(LocalizedString input, out string parametrized)
+			{
+				object?[] transformed = new object?[input.Parameters.Count];
+				for (var i = 0; i < input.Parameters.Count; i++)
+				{
+					ParametrizeLocalizedString(input.Parameters[i], out var trans);
+					transformed[i] = trans;
+				}
+
+				var groupKeyPair = input.Key.Split('.', StringSplitOptions.RemoveEmptyEntries);
+				if (groupKeyPair.Length != 2)
+				{
+					parametrized = input.Key;
+					return false;
+				}
+
+				if (!_localizations.TryGetValue(groupKeyPair[0], out var group))
+				{
+					parametrized = input.Key;
+					return false;
+				}
+
+				if (!group.TryGetValue(groupKeyPair[1], out var localizations))
+				{
+					parametrized = input.Key;
+					return false;
+				}
+
+				if (!localizations.TryGetValue(locale, out var r))
+					parametrized = !localizations.TryGetValue("en", out r) ? localizations.First().Value : r;
+				else
+					parametrized = r;
+
+				int argIdx = 0;
+				var pattern = LocalizationParameterRegex.Replace(parametrized, (match) =>
+				{
+					if (match.Groups["num"].Length > 0)
+						return $"{{{argIdx++}}}";
+					if (match.Groups["group"].Length <= 0) return "";
+					if (!ParametrizeLocalizedString(new LocalizedString($"{match.Groups["group"].Value.ToLower()}-name.{match.Groups["key"]}"), out var s))
+						System.Diagnostics.Debugger.Break();
+					return s;
+				});
+				try { parametrized = string.Format(pattern, transformed); } catch { System.Diagnostics.Debugger.Break(); }
+				return true;
+			}
+
+			if (ParametrizeLocalizedString(str, out var parametrizedStr))
+			{
+				result = string.Format(parametrizedStr, args);
+				return true;
+			}
+
+			result = parametrizedStr;
+			return false;
 		}
 
 		private DynValue Breakpoint(ScriptExecutionContext context, CallbackArguments args)

@@ -1,4 +1,5 @@
-﻿using JetBrains.Annotations;
+﻿#nullable enable
+using JetBrains.Annotations;
 
 namespace FactorioModLoader.Prototypes
 {
@@ -6,6 +7,7 @@ namespace FactorioModLoader.Prototypes
 	[Repository("data.raw.fluid")]
 	public interface IFluid : IPrototypeBase
 	{
-
+		[PublicAPI]
+		IconSpecification Icon { get; }
 	}
 }

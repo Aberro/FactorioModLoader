@@ -1,8 +1,10 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using MoonSharp.Interpreter;
 using MoonSharp.Interpreter.Loaders;
 
@@ -28,14 +30,28 @@ namespace FactorioModLoader
 			_modules.Remove(module);
 		}
 
-		public Stream Load(string fileName)
+		public Stream? Load(string fileName)
 		{
 			var match = ModNameRegex.Match(fileName);
 			if(!match.Success)
 				throw new ArgumentException("Invalid filename format!", nameof(fileName));
 			var modName = match.Groups["name"].Value;
 			var mod = _modules.FirstOrDefault(x => x.Name == modName) ?? throw new ApplicationException($"Module with name {modName} not found!");
-			return mod.Load(fileName);
+			if (mod.ResolveFileName(fileName) != null)
+				return mod.Load(fileName);
+			return null;
+		}
+
+		public Task<Stream?> LoadAsync(string fileName)
+		{
+			var match = ModNameRegex.Match(fileName);
+			if (!match.Success)
+				throw new ArgumentException("Invalid filename format!", nameof(fileName));
+			var modName = match.Groups["name"].Value;
+			var mod = _modules.FirstOrDefault(x => x.Name == modName) ?? throw new ApplicationException($"Module with name {modName} not found!");
+			if (mod.ResolveFileName(fileName) != null)
+				return mod.LoadAsync(fileName);
+			return Task.FromResult((Stream?)null);
 		}
 		public object? LoadFile(string? file, Table globalContext)
 		{
