@@ -300,13 +300,13 @@ namespace FactorioModLoader
 			{
 				ResolveDependencies();
 				CheckDependencies();
-
+				_localizations.Clear();
 				foreach (var mod in _activeModules)
 					_ = Task.Run(() => mod.LoadLocalizations(_localizations));
 
 				var table = new Table(_lua);
 				foreach (var mod in _activeModules)
-					table[mod.Name] = new Table(_lua);
+					table[mod.Name] = mod.Version.ToString();
 				_lua.Globals["mods"] = table;
 
 				OnSettingsStage(new StageEventArgs(_lua));

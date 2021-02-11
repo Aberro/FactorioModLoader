@@ -49,6 +49,8 @@ namespace FactorioModLoader
 		public IDictionary<string, IItem> SelectionTools { get; private set; } = null!;
 		[PublicAPI]
 		public IDictionary<string, IItem> ItemWithEntityData { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IItem> SpidertronRemote { get; private set; } = null!;
 		// This is internal for caching purpose
 		internal IDictionary<string, IDictionary<string, IDictionary<string, string>>>? Localizations { get; set; }
 
@@ -109,6 +111,7 @@ namespace FactorioModLoader
 			SelectionTools = _loader.LoadRepository<IItem>("data.raw.selection-tool", raw["selection-tool"]);
 			Technology = _loader.LoadRepository<ITechnology>("data.raw.technology", raw["technology"]);
 			Recipe = _loader.LoadRepository<IRecipe>("data.raw.recipe", raw["recipe"]);
+			SpidertronRemote = _loader.LoadRepository<IItem>("data.raw.spidertron-remote", raw["spidertron-remote"]);
 		}
 
 		public Task Save(string path)

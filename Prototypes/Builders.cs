@@ -33,7 +33,15 @@ namespace FactorioModLoader.Prototypes
 			{
 				dynamic product = new ExpandoObject();
 				product.name = data;
-				return DataLoader.Current?.ProxyValue(typeof(IItemProduct), data) ?? throw new ApplicationException();
+				product.amount = 1;
+				return DataLoader.Current?.ProxyValue(typeof(IItemProduct), product) ?? throw new ApplicationException();
+			}
+			if (data is object[] arr && arr.Length == 2 && arr[0] is string)
+			{
+				dynamic product = new ExpandoObject();
+				product.name = arr[0];
+				product.amount = arr[1];
+				return DataLoader.Current?.ProxyValue(typeof(IItemProduct), product) ?? throw new ApplicationException();
 			}
 
 			var dic = (IDictionary<string, object>)data;

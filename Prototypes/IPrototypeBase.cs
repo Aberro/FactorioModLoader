@@ -23,12 +23,12 @@ namespace FactorioModLoader.Prototypes
 		/// Overwrites the description set in the locale file. The description is usually shown in the tooltip of the prototype.
 		/// </summary>
 		[PublicAPI]
-		LocalizedString? LocalisedDescription { get; }
+		LocalizedString? LocalizedDescription { get; }
 		/// <summary>
 		/// Overwrites the name set in the locale file. Can be used to easily set a procedurally-generated name because the LocalisedString format allows to insert parameters into the name directly from the Lua script.
 		/// </summary>
 		[PublicAPI]
-		LocalizedString? LocalisedName { get; }
+		LocalizedString? LocalizedName { get; }
 		/// <summary>
 		/// Used to order items in inventory, recipes and GUI's.
 		/// </summary>

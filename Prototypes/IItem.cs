@@ -16,6 +16,7 @@ namespace FactorioModLoader.Prototypes
 	[Repository("data.raw.rail-planner")]
 	[Repository("data.raw.item-with-entity-data")]
 	[Repository("data.raw.selection-tool")]
+	[Repository("data.raw.spidertron-remote")]
 	public interface IItem : IPrototypeBase
 	{
 		[PublicAPI]

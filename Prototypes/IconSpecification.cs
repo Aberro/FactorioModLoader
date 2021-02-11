@@ -16,7 +16,7 @@ namespace FactorioModLoader.Prototypes
 		{
 			if (container is IDictionary<string, object> dic)
 			{
-				if (dic.TryGetValue("icon", out var icon))
+				if (dic.TryGetValue("icon", out var icon) && icon != null)
 				{
 					if (dic.TryGetValue("icon_size", out var iconSize))
 					{
@@ -32,7 +32,7 @@ namespace FactorioModLoader.Prototypes
 					else
 						throw new ApplicationException("Both 'icon' and 'icon_size' should be specified!");
 				}
-				else if (dic.TryGetValue("icons", out var icons))
+				else if (dic.TryGetValue("icons", out var icons) && icons != null)
 				{
 					dic.TryGetValue("icon_size", out var globalIconSize);
 					List<IIconData> result = new List<IIconData>();

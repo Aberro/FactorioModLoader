@@ -28,21 +28,23 @@ namespace FactorioModLoader
 		public string? Description { get; protected set; }
 		public string? Author { get; protected set; }
 		public string? Homepage { get; protected set; }
+
 		public abstract IEnumerable<Dependency> Dependencies { get; }
 		public abstract Stream? Load(string fileName);
 		public abstract Task<Stream?> LoadAsync(string fileName);
 		public async Task LoadLocalizations(IDictionary<string, IDictionary<string, IDictionary<string, string>>> localizations)
 		{
+			
 			foreach (var localization in LoadLocalizationFiles())
 			{
 				using var reader = new StreamReader(localization.File);
 				string? line;
 				ConcurrentDictionary<string, IDictionary<string, string>> currentGroup;
 				{
-					if (!localizations.TryGetValue("", out var group))
+					if (!localizations.TryGetValue(Name, out var group))
 					{
 						currentGroup = new ConcurrentDictionary<string, IDictionary<string, string>>();
-						if (!localizations.TryAdd("", currentGroup))
+						if (!localizations.TryAdd(Name, currentGroup))
 							currentGroup = (ConcurrentDictionary<string, IDictionary<string, string>>) localizations[""];
 					}
 					else

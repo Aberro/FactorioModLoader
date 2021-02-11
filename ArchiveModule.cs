@@ -29,7 +29,13 @@ namespace FactorioModLoader
 			var infoPath = Path.Combine(mainDirectoryName, "info.json").Replace(Path.DirectorySeparatorChar, '/');
 			var infoEntry = archive.GetEntry(infoPath);
 			if (infoEntry == null)
-				throw new ArgumentException("Module info not found!", nameof(path));
+			{
+				// try to find it
+				infoEntry = archive.Entries.Where(x => x.Name == "info.json").FirstOrDefault();
+				if(infoEntry == null)
+					throw new ArgumentException("Module info not found!", nameof(path));
+				mainDirectoryName = Path.GetDirectoryName(infoEntry.FullName) ?? "";
+			}
 			dynamic info;
 			using(var zipEntry = infoEntry.Open())
 			{
@@ -38,7 +44,6 @@ namespace FactorioModLoader
 			Name = info["name"];
 			Title = info.ContainsKey("title") ? info["title"] : Name;
 			Version = info.ContainsKey("version") ? new Version((string)info["version"]) : new Version();
-			Version = info.ContainsKey("factorio_version") ? new Version((string)info["factorio_version"]) : new Version();
 			FactorioVersion = info.ContainsKey("factorio_version") ? new Version((string)info["factorio_version"]) : new Version();
 			Description = info.ContainsKey("description") ? info["description"] : "";
 			Author = info.ContainsKey("author") ? info["author"] : "";
@@ -57,7 +62,7 @@ namespace FactorioModLoader
 				entry.Open().CopyTo(stream);
 				stream.Position = 0;
 				_cache.Add(name, stream);
-				if (entry.FullName == thumbnail.FullName)
+				if (thumbnail != null && entry.FullName == thumbnail.FullName)
 					Thumbnail = name;
 			}
 		}
@@ -82,7 +87,10 @@ namespace FactorioModLoader
 		public override Stream? Load(string fileName)
 		{
 			if (_cache.TryGetValue(fileName, out var result))
-				return result;
+			{
+				var result_copy = new MemoryStream(result.ToArray());
+				return result_copy;
+			}
 			return null;
 		}
 		public override Task<Stream?> LoadAsync(string fileName)

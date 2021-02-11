@@ -58,6 +58,7 @@ namespace FactorioModLoader.Prototypes
 	{
 		[PublicAPI]
 		[Indexed(0)]
+		[Alias("name")]
 		public ITool Item { get; }
 
 		[PublicAPI]
