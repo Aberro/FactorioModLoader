@@ -25,6 +25,7 @@ namespace FactorioModLoader
 		private readonly ModuleScriptLoader _loader;
 		private bool _hasStarted;
 		private readonly Script _lua;
+		private TaskCompletionSource<bool> _loading = new TaskCompletionSource<bool>();
 
 		[PublicAPI]
 		public string FactorioDirectory { get; }
@@ -79,6 +80,7 @@ namespace FactorioModLoader
 		public event ModuleEventHandler? ModuleActivated;
 		[PublicAPI]
 		public event ModuleEventHandler? ModuleDeactivated;
+		public Task Loading => _loading.Task;
 
 		[PublicAPI]
 		public static async Task<FactorioEmulator> Create(string factorioPath, string modsPath, string cachePath)
@@ -564,6 +566,7 @@ namespace FactorioModLoader
 			try
 			{
 				LoadingCompleted?.Invoke(this, EventArgs.Empty);
+				_loading.SetResult(true);
 			}
 			catch { /**/ }
 		}

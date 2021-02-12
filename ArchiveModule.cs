@@ -57,7 +57,7 @@ namespace FactorioModLoader
 			{
 				var name = entry.FullName;
 				var idx = name.IndexOf(mainDirectoryName, StringComparison.InvariantCultureIgnoreCase);
-				name = $"__{Name}__" + name.Substring(idx + mainDirectoryName.Length);
+				name = $"__{Name}__" + name[(idx + mainDirectoryName.Length)..];
 				var stream = new MemoryStream((int)entry.Length);
 				entry.Open().CopyTo(stream);
 				stream.Position = 0;
@@ -73,7 +73,7 @@ namespace FactorioModLoader
 			foreach (var pair in _cache)
 				if (pair.Key.StartsWith(localePath))
 				{
-					var locale = pair.Key.Substring(localePath.Length).Split('/')[0];
+					var locale = pair.Key[localePath.Length..].Split('/')[0];
 					if (string.IsNullOrWhiteSpace(locale))
 						throw new ApplicationException();
 					yield return (locale, pair.Value);
