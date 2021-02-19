@@ -12,15 +12,26 @@ namespace FactorioModLoader.Prototypes
 		[UsedImplicitly]
 		public static IIngredient Build(dynamic data)
 		{
-			var dic = (IDictionary<string, object>) data;
-			if (!dic.ContainsKey("type"))
-				return DataLoader.Current?.ProxyValue(typeof(IItemIngredient), data) ?? throw new ApplicationException();
-			return dic["type"] switch
+			if (data is IDictionary<string, object> dic)
 			{
-				"item" => DataLoader.Current?.ProxyValue(typeof(IItemIngredient), data) ?? throw new ApplicationException(),
-				"fluid" => DataLoader.Current?.ProxyValue(typeof(IFluidIngredient), data) ?? throw new ApplicationException(),
-				_ => throw new ApplicationException("Invalid ingredient type!")
-			};
+				if (!dic.ContainsKey("type"))
+					return DataLoader.Current?.ProxyValue(typeof(IItemIngredient), data) ??
+					       throw new ApplicationException();
+				return dic["type"] switch
+				{
+					"item" => DataLoader.Current?.ProxyValue(typeof(IItemIngredient), data) ??
+					          throw new ApplicationException(),
+					"fluid" => DataLoader.Current?.ProxyValue(typeof(IFluidIngredient), data) ??
+					           throw new ApplicationException(),
+					_ => throw new ApplicationException("Invalid ingredient type!")
+				};
+			}
+			if (data is object[] arr && arr.Length == 2)
+			{
+				return (IIngredient) (DataLoader.Current?.ProxyValue(typeof(IItemIngredient), arr) ??
+				                      throw new ApplicationException());
+			}
+			throw new ApplicationException("Invalid ingredient type!");
 		}
 	}
 
@@ -29,8 +40,10 @@ namespace FactorioModLoader.Prototypes
 		[UsedImplicitly]
 		public static IProduct Build(dynamic data)
 		{
-			if (data is string)
+			if (data is string s)
 			{
+				if (s.Length == 0)
+					new object();
 				dynamic product = new ExpandoObject();
 				product.name = data;
 				product.amount = 1;

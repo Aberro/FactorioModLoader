@@ -6,11 +6,25 @@ using JetBrains.Annotations;
 
 namespace FactorioModLoader.Prototypes
 {
-	[InitializeByContainer]
+	[InitializeByTargetType(nameof(TryCreate))]
 	[PublicAPI]
 	public class IconSpecification
 	{
 		public IList<IIconData> Icons { get; }
+		public static IconSpecification? TryCreate(string propertyName, dynamic container)
+		{
+			if (container is IDictionary<string, object> dic)
+			{
+				if (dic.TryGetValue("icon", out var icon) && icon != null)
+				{
+					if (dic.TryGetValue("icon_size", out var iconSize))
+						return new IconSpecification(propertyName, container);
+				}
+				else if (dic.TryGetValue("icons", out var icons) && icons != null)
+					return new IconSpecification(propertyName, container);
+			}
+			return null;
+		}
 		[PublicAPI]
 		public IconSpecification([UsedImplicitly]string propertyName, dynamic container)
 		{

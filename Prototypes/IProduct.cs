@@ -8,6 +8,9 @@ namespace FactorioModLoader.Prototypes
 	[Builder(typeof(ProductBuilder))]
 	public interface IProduct
 	{
+		[PublicAPI]
+		[DefaultValue(true)]
+		bool ShowDetailsInRecipeTooltip { get; }
 	}
 	[PublicAPI]
 	public interface IItemProduct : IProduct
@@ -19,16 +22,19 @@ namespace FactorioModLoader.Prototypes
 
 		[PublicAPI]
 		[Indexed(1)]
-		ushort Amount { get; }
+		[DefaultValue(null)]
+		ushort? Amount { get; }
 
 		[PublicAPI]
 		[DefaultValue(1.0)]
 		double Probability { get; }
 
 		[PublicAPI]
+		[DefaultValue(null)]
 		ushort? AmountMin { get; }
 
 		[PublicAPI]
+		[DefaultValue(null)]
 		ushort? AmountMax { get; }
 
 		[PublicAPI]
@@ -44,7 +50,7 @@ namespace FactorioModLoader.Prototypes
 		IFluid Fluid { get; }
 
 		[PublicAPI]
-		[DefaultValue(1)]
+		[DefaultValue(1.0)]
 		double Probability { get; }
 
 		[PublicAPI]

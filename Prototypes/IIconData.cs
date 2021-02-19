@@ -9,7 +9,7 @@ namespace FactorioModLoader.Prototypes
 		public short IconSize { get; }
 		[DefaultValue(typeof(Color), "[0,0,0]")]
 		public Color Tint { get; }
-		[DefaultValue(1)]
+		[DefaultValue(1.0)]
 		public double Scale { get; }
 		[DefaultValue(typeof(Vector), "[0,0]")]
 		public Vector Shift { get; }

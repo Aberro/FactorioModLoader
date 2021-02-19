@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using System.ComponentModel;
 using JetBrains.Annotations;
 
 namespace FactorioModLoader.Prototypes
@@ -21,19 +22,22 @@ namespace FactorioModLoader.Prototypes
 		string Type { get; }
 		/// <summary>
 		/// Overwrites the description set in the locale file. The description is usually shown in the tooltip of the prototype.
-		/// </summary>
+		/// </summary
 		[PublicAPI]
-		LocalizedString? LocalizedDescription { get; }
+		[DefaultValue(null)]
+		LocalizedString? LocalisedDescription { get; }
 		/// <summary>
 		/// Overwrites the name set in the locale file. Can be used to easily set a procedurally-generated name because the LocalisedString format allows to insert parameters into the name directly from the Lua script.
 		/// </summary>
 		[PublicAPI]
-		LocalizedString? LocalizedName { get; }
+		[DefaultValue(null)]
+		LocalizedString? LocalisedName { get; }
 		/// <summary>
 		/// Used to order items in inventory, recipes and GUI's.
 		/// </summary>
 		/// <remarks>May not exceed a length of 200 characters.</remarks>
 		[PublicAPI]
+		[DefaultValue(null)]
 		Order? Order { get; }
 	}
 }

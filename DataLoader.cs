@@ -1,6 +1,7 @@
 ﻿#nullable enable
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -32,6 +33,19 @@ namespace FactorioModLoader
 			_repositories.Add(repositoryPath, result);
 			return result;
 		}
+		public IDictionary<string, T> LoadRepositories<T>(string repositoryPath, params dynamic[] data) where T : class
+		{
+			if (data.Length == 1 && data[0] is dynamic[])
+			{
+				data = data[0];
+			}
+			if(data.Any(x => !(x is ExpandoObject)))
+				throw new ApplicationException("Expected expando object!");
+			var result = data.Cast<ExpandoObject>().SelectMany(x => x).Where(x => x.Value != null)
+				.ToDictionary(x => x.Key, x => Proxy<T>(x.Value));
+			_repositories.Add(repositoryPath, result);
+			return result;
+		}
 
 		public object? TryGetFromRepository(string repositoryPath, string key)
 		{
@@ -41,11 +55,11 @@ namespace FactorioModLoader
 			return dic[key];
 		}
 
-		public object ProxyValue(Type returnType, object value)
+		public object? ProxyValue(Type returnType, object value)
 		{
 			return ProxyValue(returnType, value, null);
 		}
-		private object ProxyValue(Type returnType, object value, PropertyInfo? property)
+		private object? ProxyValue(Type returnType, object value, PropertyInfo? property)
 		{
 			try
 			{
@@ -68,7 +82,7 @@ namespace FactorioModLoader
 						foreach (var item in list)
 						{
 							var val = ProxyValue(returnType.GenericTypeArguments[0], item);
-							result.Add((dynamic) val);
+							result.Add((dynamic?) val);
 						}
 					}
 
@@ -121,6 +135,14 @@ namespace FactorioModLoader
 				}
 
 				// presumably some system type
+				var underlyingType = Nullable.GetUnderlyingType(returnType);
+				if (underlyingType != null)
+					if (value == null)
+						return null;
+					else
+					{
+						returnType = underlyingType;
+					}
 				if (returnType.GetInterface("IConvertible") != null && value is IConvertible convertible)
 					return convertible.ToType(returnType, CultureInfo.InvariantCulture);
 				if (value is ExpandoObject)
@@ -154,13 +176,13 @@ namespace FactorioModLoader
 		{
 			private readonly DataLoader _loader;
 			private readonly dynamic _data;
-			private readonly Dictionary<MethodInfo, object?> _cache;
+			private readonly ConcurrentDictionary<MethodInfo, object?> _cache;
 			public Interceptor(DataLoader loader, object data)
 			{
 				_loader = loader;
 
 				_data = data;
-				_cache = new Dictionary<MethodInfo, object?>();
+				_cache = new ConcurrentDictionary<MethodInfo, object?>();
 			}
 
 			public void Intercept(IInvocation invocation)
@@ -177,85 +199,236 @@ namespace FactorioModLoader
 				var propertyName = methodName.Substring(4);
 				//var dic = (IDictionary<string, object>)_data;
 				result = ResolveValue(propertyName, invocation.Method.ReturnType, invocation.Proxy, _data);
-				_cache.Add(invocation.Method, result);
+				while (!_cache.TryAdd(invocation.Method, result))
+				{
+					if (_cache.TryGetValue(invocation.Method, out var resultNew))
+					{
+						result = resultNew;
+						break;
+					}
+				}
 				invocation.ReturnValue = result;
 			}
 
 			private object? ResolveValue(string propertyName, Type returnType, object proxy, dynamic data)
 			{
-				if (returnType.GetCustomAttribute<InitializeByContainer>() != null)
-				{
-					var ctor = returnType.GetConstructor(new[]
-						{typeof(string), typeof(DynamicMetaObject)});
-					if (ctor != null)
-					{
-						return ctor.Invoke(new[] { propertyName, _data });
-					}
-				}
-
-				var proxyType = proxy.GetType();
-				var baseType = proxyType.BaseType;
-				PropertyInfo? property = baseType?.GetProperty(propertyName);
-				if (property == null)
-					foreach (var iface in proxyType.GetInterfaces())
-					{
-						property = iface.GetProperty(propertyName);
-						if (property != null)
-							break;
-					}
+				object? result = null;
+				if (ResolveValueByContainer(ref result, returnType, propertyName)) return result;
+				
+				var property = ResolvePropertyInfo(propertyName, proxy);
 				if (property == null)
 					throw new ApplicationException($"Property {propertyName} not found!");
-				baseType = property.DeclaringType ?? throw new ApplicationException();
+				var baseType = property.DeclaringType ?? throw new ApplicationException();
+				if (ResolveValueByAccessor(ref result, proxy, propertyName, property, baseType))
+					return result;
+				if (ResolveValueByAlternatives(ref result, returnType, baseType, propertyName, data, property))
+					return result;
+				if (ResolveValueAsIndexed(ref result, returnType, data, property))
+					return result;
+				if (ResolveValueAsEntry(ref result, propertyName, returnType, data, property))
+					return result;
+				if (ResolveDefaultValue(ref result, returnType, property))
+					return result;
+				
+
+				//if (IsNullable(property.DeclaringType, property)) return null;
+				throw new ApplicationException($"Mandatory property {baseType.FullName}.{propertyName} is undefined!");
+			}
+			private PropertyInfo? ResolvePropertyInfo(string propertyName, object proxy)
+			{
+				var proxyType = proxy.GetType();
+				var baseType = proxyType.BaseType;
+				PropertyInfo? propertyInfo = baseType?.GetProperty(propertyName);
+				if (propertyInfo == null)
+					foreach (var iface in proxyType.GetInterfaces())
+					{
+						propertyInfo = iface.GetProperty(propertyName);
+						if (propertyInfo != null)
+							break;
+					}
+				return propertyInfo;
+			}
+			private bool ResolveValueByContainer(ref object? value, Type returnType, string propertyName)
+			{
+				var attr = returnType.GetCustomAttribute<InitializeByTargetType>();
+				if (attr == null)
+					return false;
+				MethodBase? builder;
+				if (attr.BuilderMethod == null)
+				{
+					builder = returnType.GetConstructor(new[]
+						{typeof(string), typeof(DynamicMetaObject)});
+					if (builder == null)
+						return false;
+				}
+				else
+				{
+					builder = returnType.GetMethod(attr.BuilderMethod);
+					if (builder == null)
+						return false;
+				}
+				try
+				{
+					value = builder?.Invoke(null, new[] {propertyName, _data});
+					return true;
+				}
+				catch
+				{
+					return false;
+				}
+			}
+			private bool ResolveValueByAccessor(ref object? value, object proxy, string propertyName, PropertyInfo property, Type baseType)
+			{
 				var accessorAttr = property.GetCustomAttribute<AccessorAttribute>();
 				if (accessorAttr != null)
 				{
 					var accessorMethod = accessorAttr.AccessorType.GetMethod(propertyName);
-					if (accessorMethod == null) throw new ApplicationException($"Accessor method {propertyName}() not found!");
-					return accessorMethod.Invoke(null, new[] { proxy, _data });
+					if (accessorMethod == null)
+						throw new ApplicationException($"Accessor method {propertyName}() not found!");
+					var parameters = accessorMethod.GetParameters();
+					if (parameters.Length == 2)
+					{
+						value = accessorMethod.Invoke(null, new[] { proxy, _data });
+						return true;
+					}
+					if (parameters.Length == 3)
+					{
+						var argument = accessorAttr.Argument;
+						if (argument == null)
+						{
+							var accessorArgAttr = property.GetCustomAttribute<AccessorArgumentAttribute>();
+							if (accessorArgAttr != null)
+								argument = accessorArgAttr.Argument;
+						}
+						if (argument == null)
+						{
+							var accessorArgClassAttr = baseType.GetCustomAttribute<AccessorArgumentAttribute>();
+							if (accessorArgClassAttr != null)
+								argument = accessorArgClassAttr.Argument;
+						}
+						value = accessorMethod.Invoke(null, new[] { proxy, _data, argument });
+						return true;
+					}
 				}
-
+				return false;
+			}
+			bool ResolveValueAsIndexed(ref object? value, Type returnType, dynamic data, PropertyInfo property)
+			{
 				var indexed = property.GetCustomAttribute<IndexedAttribute>();
 				if (indexed != null && data is IList<object> list)
 				{
-					if(list.Count <= indexed.Index)
+					if (list.Count <= indexed.Index)
 						throw new ApplicationException("Property index is out of bounds!");
 					var result = _loader.ProxyValue(returnType, list[(int)indexed.Index], property);
 					if (result is ExpandoObject)
 						throw new ApplicationException("Cant proxy value!");
-					return result;
+					value = result;
+					return true;
 				}
-
+				return false;
+			}
+			bool ResolveValueAsEntry(ref object? value, string propertyName, Type returnType, dynamic data, PropertyInfo property)
+			{
 				if (data is IDictionary<string, object> dic)
 				{
 					var key = TryGetKey(property, propertyName, dic);
 					if (key != null)
 					{
 						var val = dic[key];
-						if (val == null)
-							return null;
+						var nullable = IsNullable(property.DeclaringType ?? throw new NullReferenceException(), property);
+						if ((val == null || val is string s && s.Length == 0) && nullable)
+						{
+							value = null;
+							return true;
+						}
 						var result = _loader.ProxyValue(returnType, dic[key], property);
 						if (result is ExpandoObject)
 							throw new ApplicationException("Cant proxy value!");
-						return result;
-					}
-
-					var attr = property.GetCustomAttribute<DefaultValueAttribute>();
-					if (attr != null)
-					{
-						var result = attr.Value;
-						if (result == null)
-							throw new ApplicationException(
-								"Default value can't be null! (Leave property as nullable reference type instead)");
-						if (result is IConvertible convertible)
-							return convertible.ToType(returnType, CultureInfo.InvariantCulture);
-						return result;
+						value = result;
+						return true;
 					}
 				}
+				return false;
+			}
+			bool ResolveDefaultValue(ref object? value, Type returnType, PropertyInfo property)
+			{
+				var attr = property.GetCustomAttribute<DefaultValueAttribute>();
+				if (attr == null)
+					return false;
+				var result = attr.Value;
+				var repoAttrs = returnType.GetCustomAttributes<RepositoryAttribute>();
+				if (repoAttrs != null && result is string)
+				{
+					value = _loader.ProxyValue(returnType, result, property);
+					return true;
+				}
+				switch (result)
+				{
+					case null when !IsNullable(property.DeclaringType ?? throw new NullReferenceException(), property):
+						throw new ApplicationException(
+							"Default value can't be null! (Leave property as nullable reference type instead)");
+					case IConvertible convertible:
+						value = convertible.ToType(returnType, CultureInfo.InvariantCulture);
+						break;
+				}
+				value = result;
+				return true;
+			}
+			bool ResolveValueByAlternatives(ref object? value, Type returnType, Type baseType, string propertyName, dynamic data, PropertyInfo property)
+			{
+				var attr = property.GetCustomAttribute<AlternatingDataAttribute>();
+				if (attr == null)
+					return false;
+				foreach (var path in attr.DataPaths)
+				{
+					var parts = path.Split('.', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+					var localData = data;
+					foreach (var part in parts)
+					{
+						var dic = (IDictionary<string, object>)localData;
+						if (!dic.ContainsKey(part))
+							goto continue_main;
+						localData = dic[part];
+					}
+					// Try it as indexed value if needed...
+					var indexed = property.GetCustomAttribute<IndexedAttribute>();
+					if (indexed != null && localData is IList<object> list)
+					{
+						if (list.Count <= indexed.Index)
+							throw new ApplicationException("Property index is out of bounds!");
+						var result = _loader.ProxyValue(returnType, list[(int)indexed.Index], property);
+						if (result is ExpandoObject)
+							throw new ApplicationException("Cant proxy value!");
+						value = result;
+						return true;
+					}
+					// Then try it as usual value
+					try
+					{
+						bool nullable = IsNullable(property.DeclaringType ?? throw new NullReferenceException(), property);
+						if (localData == null && nullable)
+						{
+							value = null;
+							return true;
+						}
+						var result = _loader.ProxyValue(returnType, localData, property);
+						if (result is ExpandoObject)
+							throw new ApplicationException("Cant proxy value!");
+						value = result;
+						return true;
+					}
+					catch
+					{
+						// ignored
+					}
+					continue_main:
+					;
 
-				if (IsNullable(property.DeclaringType, property)) return null;
+				}
+				if (ResolveDefaultValue(ref value, returnType, property))
+					return true;
 				throw new ApplicationException($"Mandatory property {baseType.FullName}.{propertyName} is undefined!");
 			}
-
 			private string? TryGetKey(PropertyInfo property, string propertyName, IDictionary<string, object> dic)
 			{
 				List<string> aliases = new List<string>(3)
@@ -291,45 +464,46 @@ namespace FactorioModLoader
 				}
 				return new string(chars);
 			}
-			private static bool IsNullable(Type enclosingType, PropertyInfo property)
-			{
-				if (!enclosingType.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).Contains(property))
-					throw new ArgumentException("enclosingType must be the type which defines property");
+		}
 
-				var nullable = property.CustomAttributes
-					.FirstOrDefault(x => x.AttributeType.FullName == "System.Runtime.CompilerServices.NullableAttribute");
-				if (nullable != null && nullable.ConstructorArguments.Count == 1)
+		private static bool IsNullable(Type enclosingType, PropertyInfo? property)
+		{
+			if (!enclosingType.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).Contains(property))
+				throw new ArgumentException("enclosingType must be the type which defines property");
+
+			var nullable = property?.CustomAttributes
+				.FirstOrDefault(x => x.AttributeType.FullName == "System.Runtime.CompilerServices.NullableAttribute");
+			if (nullable != null && nullable.ConstructorArguments.Count == 1)
+			{
+				var attributeArgument = nullable.ConstructorArguments[0];
+				if (attributeArgument.ArgumentType == typeof(byte[]))
 				{
-					var attributeArgument = nullable.ConstructorArguments[0];
-					if (attributeArgument.ArgumentType == typeof(byte[]))
+					var args = (ReadOnlyCollection<CustomAttributeTypedArgument>?)attributeArgument.Value;
+					if (args != null && args.Count > 0 && args[0].ArgumentType == typeof(byte))
 					{
-						var args = (ReadOnlyCollection<CustomAttributeTypedArgument>?)attributeArgument.Value;
-						if (args != null && args.Count > 0 && args[0].ArgumentType == typeof(byte))
-						{
-							var val = args[0].Value;
-							return val != null ? (byte)val == 2 : throw new NullReferenceException();
-						}
-					}
-					else if (attributeArgument.ArgumentType == typeof(byte))
-					{
-						var val = attributeArgument.Value;
+						var val = args[0].Value;
 						return val != null ? (byte)val == 2 : throw new NullReferenceException();
 					}
 				}
-
-				var context = enclosingType.CustomAttributes
-					.FirstOrDefault(x => x.AttributeType.FullName == "System.Runtime.CompilerServices.NullableContextAttribute");
-				if (context != null &&
-				    context.ConstructorArguments.Count == 1 &&
-				    context.ConstructorArguments[0].ArgumentType == typeof(byte))
+				else if (attributeArgument.ArgumentType == typeof(byte))
 				{
-					var val = context.ConstructorArguments[0].Value;
+					var val = attributeArgument.Value;
 					return val != null ? (byte)val == 2 : throw new NullReferenceException();
 				}
-
-				// Couldn't find a suitable attribute
-				return false;
 			}
+
+			var context = enclosingType.CustomAttributes
+				.FirstOrDefault(x => x.AttributeType.FullName == "System.Runtime.CompilerServices.NullableContextAttribute");
+			if (context != null &&
+			    context.ConstructorArguments.Count == 1 &&
+			    context.ConstructorArguments[0].ArgumentType == typeof(byte))
+			{
+				var val = context.ConstructorArguments[0].Value;
+				return val != null ? (byte)val == 2 : throw new NullReferenceException();
+			}
+
+			// Couldn't find a suitable attribute
+			return false;
 		}
 
 	}

@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using System.ComponentModel;
 using JetBrains.Annotations;
 
 namespace FactorioModLoader.Prototypes
@@ -21,5 +22,17 @@ namespace FactorioModLoader.Prototypes
 	{
 		[PublicAPI]
 		IconSpecification Icon { get; }
+
+		[PublicAPI]
+		[DefaultValue("other")]
+		IItemSubgroup Subgroup { get; }
+
+		[PublicAPI]
+		[DefaultValue(null)]
+		IEntity? PlaceResult { get; }
+
+		[PublicAPI]
+		[DefaultValue(null)]
+		IEquipment? PlacedAsEquipmentResult { get; }
 	}
 }

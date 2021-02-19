@@ -19,6 +19,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <None Include="RecipeCalculatorCore.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Castle.Core" Version="4.4.1" />
 		<PackageReference Include="JetBrains.Annotations" Version="2020.1.0" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.5.0" />

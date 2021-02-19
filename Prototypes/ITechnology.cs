@@ -7,14 +7,11 @@ namespace FactorioModLoader.Prototypes
 {
 	[PublicAPI]
 	[Repository("data.raw.technology")]
-	public interface ITechnology : IPrototypeBase
+	[AccessorArgument("unit")]
+	public interface ITechnology : IPrototypeBase, INormalExpensiveMode<ITechnology, ITechnologyData>
 	{
 		[PublicAPI]
 		IconSpecification Icon { get; }
-		[Accessor(typeof(TechnologyAccessor))]
-		public ITechnologyData Normal { get; }
-		[Accessor(typeof(TechnologyAccessor))]
-		public ITechnologyData Expensive { get; }
 	}
 
 }

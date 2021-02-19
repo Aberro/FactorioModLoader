@@ -51,6 +51,19 @@ namespace FactorioModLoader
 		public IDictionary<string, IItem> ItemWithEntityData { get; private set; } = null!;
 		[PublicAPI]
 		public IDictionary<string, IItem> SpidertronRemote { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IRecipeCategory> RecipeCategory { get; private set; } = null!;
+
+		[PublicAPI]
+		public IDictionary<string, IItemSubgroup> ItemSubgroup { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IItemGroup> ItemGroup { get; private set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IEntity> Entities { get; set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, IEquipment> Equipment { get; set; } = null!;
+		[PublicAPI]
+		public IDictionary<string, ICraftingMachine> CraftingMachines { get; set; } = null!;
 		// This is internal for caching purpose
 		internal IDictionary<string, IDictionary<string, IDictionary<string, string>>>? Localizations { get; set; }
 
@@ -112,6 +125,50 @@ namespace FactorioModLoader
 			Technology = _loader.LoadRepository<ITechnology>("data.raw.technology", raw["technology"]);
 			Recipe = _loader.LoadRepository<IRecipe>("data.raw.recipe", raw["recipe"]);
 			SpidertronRemote = _loader.LoadRepository<IItem>("data.raw.spidertron-remote", raw["spidertron-remote"]);
+			RecipeCategory = _loader.LoadRepository<IRecipeCategory>("data.raw.recipe-category", raw["recipe-category"]);
+			ItemSubgroup = _loader.LoadRepository<IItemSubgroup>("data.raw.item-subgroup", raw["item-subgroup"]);
+			ItemGroup = _loader.LoadRepository<IItemGroup>("data.raw.item-group", raw["item-group"]);
+			var repositories = new []
+			{
+				"arrow", "artillery-flare", "artillery-projectile", "beam", "character-corpse",
+				"cliff", "corpse", "rail-remnants", "deconstructible-tile-proxy", "entity-ghost",
+				"particle", "leaf-particle", "accumulator", "artillery-turret", "beacon", "boiler",
+				"burner-generator", "character", "arithmetic-combinator", "decider-combinator",
+				"constant-combinator", "container", "logistic-container", "infinity-container",
+				"electric-energy-interface", "electric-pole", "unit-spawner", "fish", "combat-robot",
+				"construction-robot", "logistic-robot", "gate", "generator", "heat-interface", 
+				"heat-pipe", "inserter", "lab", "lamp", "land-mine", "linked-container", "market", 
+				"mining-drill", "offshore-pump", "pipe", "infinity-pipe", "pipe-to-ground", 
+				"player-port",  "power-switch", "programmable-speaker", "pump", "radar", "curved-rail",
+				"straight-rail", "rail-chain-signal", "rail-signal", "reactor", "roboport", 
+				"simple-entity", "simple-entity-with-owner", "simple-entity-with-force", "solar-panel",
+				"spider-leg", "storage-tank", "train-stop", "linked-belt", "loader-1x1", "loader",
+				"splitter", "transport-belt", "underground-belt", "tree", "turret", "ammo-turret",
+				"electric-turret", "fluid-turret", "unit", "car", "artillery-wagon", "cargo-wagon",
+				"fluid-wagon", "locomotive", "spider-vehicle", "wall", "explosion", 
+				"flame-thrower-explosion", "fire", "stream", "flying-text", "highlight-box",
+				"item-entity", "item-request-proxy", "particle-source", "projectile", "resource",
+				"rocket-silo-rocket", "rocket-silo-rocket-shadow", "smoke", "smoke-with-trigger",
+				"speech-bubble", "sticker", "tile-ghost",
+			};
+			Entities = _loader.LoadRepositories<IEntity>("data.raw.entity",
+				raw.Where(x => repositories.Contains(x.Key)).Select(x => x.Value).ToArray());
+
+			repositories = new[]
+			{
+				"active-defense-equipment", "battery-equipment", "belt-immunity-equipment",
+				"energy-shield-equipment", "generator-equipment", "movement-bonus-equipment",
+				"night-vision-equipment", "roboport-equipment", "solar-panel-equipment"
+
+			};
+			Equipment = _loader.LoadRepositories<IEquipment>("data.raw.equipment",
+				raw.Where(x => repositories.Contains(x.Key)).Select(x => x.Value).ToArray());
+			repositories = new[]
+			{
+				"assembling-machine", "rocket-silo", "furnace"
+			};
+			CraftingMachines = _loader.LoadRepositories<ICraftingMachine>("data.raw.crafting-machine",
+				raw.Where(x => repositories.Contains(x.Key)).Select(x => x.Value).ToArray());
 		}
 
 		public Task Save(string path)

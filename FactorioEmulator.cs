@@ -453,14 +453,33 @@ namespace FactorioModLoader
 					parametrized = input.Key;
 					return false;
 				}
+				var category = groupKeyPair[0];
+				var value = groupKeyPair[1];
 
-				if (!_localizations.TryGetValue(groupKeyPair[0], out var group))
+				if (!_localizations.TryGetValue(category, out var group))
 				{
 					parametrized = input.Key;
 					return false;
 				}
 
-				if (!group.TryGetValue(groupKeyPair[1], out var localizations))
+				if (!group.TryGetValue(value, out var localizations))
+				{
+					if (char.IsDigit(value[^1]))
+					{
+						value = value[..value.LastIndexOf('-')];
+						if (!group.TryGetValue(value, out localizations))
+						{
+							parametrized = input.Key;
+							return false;
+						}
+					}
+					else
+					{
+						parametrized = input.Key;
+						return false;
+					}
+				}
+				if (localizations == null)
 				{
 					parametrized = input.Key;
 					return false;
@@ -490,8 +509,15 @@ namespace FactorioModLoader
 				result = string.Format(parametrizedStr, args);
 				return true;
 			}
-
-			result = parametrizedStr;
+			else
+				result = parametrizedStr;
+			//var idx = result.IndexOf('.');
+			//if (idx < 0)
+			//	idx = 0;
+			//var categoryStr = idx > 0 ? result[..idx] : "";
+			//if(!_localizations.TryGetValue(categoryStr, out var category)) return false;
+			//if(category.TryGetValue(parametrizedStr[(idx + 1)..], out var localizations))
+			//result = _localizations[category][[locale];
 			return false;
 		}
 
