@@ -24,7 +24,7 @@ namespace FactorioModLoader.Prototypes
 			else
 			{
 				Key = (string) data[0];
-				Parameters = (data as IEnumerable<dynamic>).Skip(1).Select(x => new LocalizedString(x)).ToArray();
+				Parameters = ((IEnumerable<dynamic>)data).Skip(1).Select(x => new LocalizedString(x)).ToArray();
 			}
 		}
 	}

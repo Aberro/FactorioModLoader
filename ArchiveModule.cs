@@ -22,8 +22,10 @@ namespace FactorioModLoader
 				throw new ArgumentException("Module does not exists!", nameof(path));
 			using var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
 			var archive = new ZipArchive(fileStream);
+			if (archive == null)
+				throw new ApplicationException();
 			var mainDirectoryName = Path.GetDirectoryName(archive.Entries.FirstOrDefault(x =>
-				!string.IsNullOrWhiteSpace(Path.GetDirectoryName(x.FullName))).FullName)?.Split('/').First();
+				!string.IsNullOrWhiteSpace(Path.GetDirectoryName(x.FullName)))?.FullName)?.Split('/').First();
 			if (mainDirectoryName == null)
 				throw new ArgumentException("Invalid mod structure!");
 			var infoPath = Path.Combine(mainDirectoryName, "info.json").Replace(Path.DirectorySeparatorChar, '/');
