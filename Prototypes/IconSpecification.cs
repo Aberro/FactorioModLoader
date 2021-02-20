@@ -17,8 +17,11 @@ namespace FactorioModLoader.Prototypes
 			{
 				if (dic.TryGetValue("icon", out var icon) && icon != null)
 				{
-					if (dic.TryGetValue("icon_size", out var iconSize))
-						return new IconSpecification(propertyName, container);
+					if (dic.TryGetValue("icon_size", out _))
+					{
+						var result = new IconSpecification(propertyName, container);
+						return result;
+					}
 				}
 				else if (dic.TryGetValue("icons", out var icons) && icons != null)
 					return new IconSpecification(propertyName, container);
@@ -26,6 +29,7 @@ namespace FactorioModLoader.Prototypes
 			return null;
 		}
 		[PublicAPI]
+		[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "api reasons")]
 		public IconSpecification([UsedImplicitly]string propertyName, dynamic container)
 		{
 			if (container is IDictionary<string, object> dic)

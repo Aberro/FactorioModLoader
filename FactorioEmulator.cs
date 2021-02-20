@@ -25,7 +25,7 @@ namespace FactorioModLoader
 		private readonly ModuleScriptLoader _loader;
 		private bool _hasStarted;
 		private readonly Script _lua;
-		private TaskCompletionSource<bool> _loading = new TaskCompletionSource<bool>();
+		private readonly TaskCompletionSource<bool> _loading = new TaskCompletionSource<bool>();
 
 		[PublicAPI]
 		public string FactorioDirectory { get; }
@@ -265,7 +265,7 @@ namespace FactorioModLoader
 							break;
 						}
 
-						if (String.Compare(x.Name, y.Name, StringComparison.InvariantCultureIgnoreCase) > 0)
+						if (string.Compare(x.Name, y.Name, StringComparison.InvariantCultureIgnoreCase) > 0)
 							bestMatch = idx+1;
 					}
 					sorted.Insert(bestMatch, x);

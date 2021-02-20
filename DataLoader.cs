@@ -27,7 +27,7 @@ namespace FactorioModLoader
 		}
 		public IDictionary<string, T> LoadRepository<T>(string repositoryPath, dynamic data) where T : class
 		{
-			if(!(data is ExpandoObject eo))
+			if(data is not ExpandoObject eo)
 				throw new ApplicationException("Expected expando object!");
 			var result = eo.Where(x => x.Value != null).ToDictionary(x => x.Key, x => Proxy<T>(x.Value));
 			_repositories.Add(repositoryPath, result);
@@ -68,9 +68,9 @@ namespace FactorioModLoader
 				if (returnType.IsInterface && (returnType.GetInterface("IEnumerable") != null || returnType.GetInterface("IList") != null))
 				{
 					dynamic result = typeof(List<>).MakeGenericType(returnType.GenericTypeArguments)
-										 .GetConstructor(new Type[0])?.Invoke(new object?[0]) ??
+										 .GetConstructor(Array.Empty<Type>())?.Invoke(Array.Empty<object?>()) ??
 									 throw new ApplicationException();
-					if (!(value is IList<object> list))
+					if (value is not IList<object> list)
 					{
 						if (property != null && property.GetCustomAttribute<AsSingularAttribute>() != null)
 							result.Add(ProxyValue(returnType.GenericTypeArguments[0], value, property));
@@ -196,7 +196,7 @@ namespace FactorioModLoader
 				var methodName = invocation.Method.Name;
 				if (!methodName.StartsWith("get_"))
 					throw new ApplicationException("Only property reading is supported!");
-				var propertyName = methodName.Substring(4);
+				var propertyName = methodName[4..];
 				//var dic = (IDictionary<string, object>)_data;
 				result = ResolveValue(propertyName, invocation.Method.ReturnType, invocation.Proxy, _data);
 				while (!_cache.TryAdd(invocation.Method, result))
@@ -234,7 +234,7 @@ namespace FactorioModLoader
 				//if (IsNullable(property.DeclaringType, property)) return null;
 				throw new ApplicationException($"Mandatory property {baseType.FullName}.{propertyName} is undefined!");
 			}
-			private PropertyInfo? ResolvePropertyInfo(string propertyName, object proxy)
+			private static PropertyInfo? ResolvePropertyInfo(string propertyName, object proxy)
 			{
 				var proxyType = proxy.GetType();
 				var baseType = proxyType.BaseType;
@@ -368,7 +368,7 @@ namespace FactorioModLoader
 						throw new ApplicationException(
 							"Default value can't be null! (Leave property as nullable reference type instead)");
 					case IConvertible convertible:
-						value = convertible.ToType(returnType, CultureInfo.InvariantCulture);
+						result = convertible.ToType(returnType, CultureInfo.InvariantCulture);
 						break;
 				}
 				value = result;
@@ -429,7 +429,7 @@ namespace FactorioModLoader
 					return true;
 				throw new ApplicationException($"Mandatory property {baseType.FullName}.{propertyName} is undefined!");
 			}
-			private string? TryGetKey(PropertyInfo property, string propertyName, IDictionary<string, object> dic)
+			private static string? TryGetKey(PropertyInfo property, string propertyName, IDictionary<string, object> dic)
 			{
 				List<string> aliases = new List<string>(3)
 				{
@@ -452,7 +452,7 @@ namespace FactorioModLoader
 				return key;
 			}
 
-			private string FormatPropertyName(string propertyName, char ch)
+			private static string FormatPropertyName(string propertyName, char ch)
 			{
 				var chars = new char[propertyName.Length + propertyName.Count(char.IsUpper) - 1];
 				for (int i = 0, j = 0; i < propertyName.Length; i++, j++)

@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using JetBrains.Annotations;
@@ -19,7 +20,7 @@ namespace FactorioModLoader.Prototypes
 			if (data is string str)
 			{
 				Key = str;
-				Parameters = new LocalizedString[0];
+				Parameters = Array.Empty<LocalizedString>();
 			}
 			else
 			{

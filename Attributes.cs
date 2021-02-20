@@ -104,6 +104,7 @@ namespace FactorioModLoader
 	/// property value with instance data itself, if it has all required properties (thus, without DefaultValueAttribute),
 	/// and if not, it'll try to look for table named "expensive".
 	/// </summary>
+	[AttributeUsage(AttributeTargets.Property)]
 	public class AlternatingDataAttribute : Attribute
 	{
 		public string[] DataPaths { get; }

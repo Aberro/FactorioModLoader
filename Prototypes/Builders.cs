@@ -40,10 +40,8 @@ namespace FactorioModLoader.Prototypes
 		[UsedImplicitly]
 		public static IProduct Build(dynamic data)
 		{
-			if (data is string s)
+			if (data is string)
 			{
-				if (s.Length == 0)
-					new object();
 				dynamic product = new ExpandoObject();
 				product.name = data;
 				product.amount = 1;

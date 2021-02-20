@@ -259,7 +259,7 @@ namespace FactorioModLoader
 				DataType.Table => LoadTable(value.Table),
 				DataType.Tuple => value.Tuple.Where(IsSerializable).Select(LoadValue).ToArray(),
 				DataType.UserData => value.UserData.Object,
-				_ => throw new ArgumentOutOfRangeException()
+				_ => throw new ArgumentOutOfRangeException(nameof(value))
 			};
 		}
 
