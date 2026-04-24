@@ -30,7 +30,7 @@ namespace FactorioModLoader.Prototypes
 		}
 		[PublicAPI]
 		[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "api reasons")]
-		public IconSpecification([UsedImplicitly]string propertyName, dynamic container)
+		public IconSpecification(string propertyName, dynamic container)
 		{
 			if (container is IDictionary<string, object> dic)
 			{

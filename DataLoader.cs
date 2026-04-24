@@ -29,7 +29,7 @@ namespace FactorioModLoader
 		{
 			if(data is not ExpandoObject eo)
 				throw new ApplicationException("Expected expando object!");
-			var result = eo.Where(x => x.Value != null).ToDictionary(x => x.Key, x => Proxy<T>(x.Value));
+			var result = eo.Where(x => x.Value != null).ToDictionary(x => x.Key, x => Proxy<T>(x.Value!));
 			_repositories.Add(repositoryPath, result);
 			return result;
 		}
@@ -42,7 +42,7 @@ namespace FactorioModLoader
 			if(data.Any(x => !(x is ExpandoObject)))
 				throw new ApplicationException("Expected expando object!");
 			var result = data.Cast<ExpandoObject>().SelectMany(x => x).Where(x => x.Value != null)
-				.ToDictionary(x => x.Key, x => Proxy<T>(x.Value));
+				.ToDictionary(x => x.Key, x => Proxy<T>(x.Value!));
 			_repositories.Add(repositoryPath, result);
 			return result;
 		}
@@ -67,13 +67,15 @@ namespace FactorioModLoader
 				// Interface
 				if (returnType.IsInterface && (returnType.GetInterface("IEnumerable") != null || returnType.GetInterface("IList") != null))
 				{
-					dynamic result = typeof(List<>).MakeGenericType(returnType.GenericTypeArguments)
-										 .GetConstructor(Array.Empty<Type>())?.Invoke(Array.Empty<object?>()) ??
+					var resultType = typeof(List<>).MakeGenericType(returnType.GenericTypeArguments);
+					dynamic result = resultType.GetConstructor(Array.Empty<Type>())?.Invoke(Array.Empty<object?>()) ??
 									 throw new ApplicationException();
+					var addMethodInfo = resultType.GetMethod("Add") ?? throw new ApplicationException();
 					if (value is not IList<object> list)
 					{
 						if (property != null && property.GetCustomAttribute<AsSingularAttribute>() != null)
-							result.Add(ProxyValue(returnType.GenericTypeArguments[0], value, property));
+							//result.Add(ProxyValue(returnType.GenericTypeArguments[0], value, property));
+							addMethodInfo.Invoke(result, new[] {ProxyValue(returnType.GenericTypeArguments[0], value, property)});
 						else
 							throw new ApplicationException("Array expected!");
 					}
@@ -82,25 +84,28 @@ namespace FactorioModLoader
 						foreach (var item in list)
 						{
 							var val = ProxyValue(returnType.GenericTypeArguments[0], item);
-							result.Add((dynamic?) val);
+							//result.Add((dynamic?) val);
+							addMethodInfo.Invoke(result, new object?[] {(dynamic?) val});
 						}
 					}
 
 					return result;
 				}
 
-				if (value is string s)
 				{
-					var repositories = returnType.GetCustomAttributes<RepositoryAttribute>().ToArray();
-					if (repositories != null && repositories.Any())
+					if (value is string s)
 					{
-						foreach (var repository in repositories)
+						var repositories = returnType.GetCustomAttributes<RepositoryAttribute>().ToArray();
+						if (repositories != null && repositories.Any())
 						{
-							var obj = TryGetFromRepository(repository.RepositoryPath, s);
-							if (obj != null)
-								return obj;
+							foreach (var repository in repositories)
+							{
+								var obj = TryGetFromRepository(repository.RepositoryPath, s);
+								if (obj != null)
+									return obj;
+							}
+							throw new ApplicationException($"Object with key '{s}' not found in repository!");
 						}
-						throw new ApplicationException($"Object with key '{s}' not found in repository!");
 					}
 				}
 
@@ -143,6 +148,10 @@ namespace FactorioModLoader
 					{
 						returnType = underlyingType;
 					}
+				{
+					if (returnType.IsEnum && value is string s)
+						return Enum.Parse(returnType, s, true);
+				}
 				if (returnType.GetInterface("IConvertible") != null && value is IConvertible convertible)
 					return convertible.ToType(returnType, CultureInfo.InvariantCulture);
 				if (value is ExpandoObject)
@@ -470,7 +479,8 @@ namespace FactorioModLoader
 		{
 			if (!enclosingType.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).Contains(property))
 				throw new ArgumentException("enclosingType must be the type which defines property");
-
+			if (property != null && property.PropertyType.IsGenericType && property.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>))
+				return true;
 			var nullable = property?.CustomAttributes
 				.FirstOrDefault(x => x.AttributeType.FullName == "System.Runtime.CompilerServices.NullableAttribute");
 			if (nullable != null && nullable.ConstructorArguments.Count == 1)

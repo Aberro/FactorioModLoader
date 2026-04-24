@@ -66,7 +66,7 @@ namespace FactorioModLoader.Prototypes
 			return sourceType == typeof(string);
 		}
 
-		public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value)
+		public override object? ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value)
 		{
 			if (!(value is string s))
 				return base.ConvertFrom(context, culture, value);

@@ -25,7 +25,7 @@ namespace FactorioModLoader
 			if (archive == null)
 				throw new ApplicationException();
 			var mainDirectoryName = Path.GetDirectoryName(archive.Entries.FirstOrDefault(x =>
-				!string.IsNullOrWhiteSpace(Path.GetDirectoryName(x.FullName)))?.FullName)?.Split('/').First();
+				!string.IsNullOrWhiteSpace(Path.GetDirectoryName(x.FullName)))?.FullName)?.Split('/', '\\').First();
 			if (mainDirectoryName == null)
 				throw new ArgumentException("Invalid mod structure!");
 			var infoPath = Path.Combine(mainDirectoryName, "info.json").Replace(Path.DirectorySeparatorChar, '/');
@@ -58,8 +58,10 @@ namespace FactorioModLoader
 			foreach (var entry in archive.Entries.Where(x => extensions.Contains(Path.GetExtension(x.Name))))
 			{
 				var name = entry.FullName;
-				var idx = name.IndexOf(mainDirectoryName, StringComparison.InvariantCultureIgnoreCase);
-				name = $"__{Name}__" + name[(idx + mainDirectoryName.Length)..];
+                var convertedSlashes = name.Replace('/', '\\');
+				var idx = convertedSlashes.IndexOf(mainDirectoryName, StringComparison.InvariantCultureIgnoreCase);
+                if(idx >= 0)
+                    name = $"__{Name}__" + convertedSlashes[(idx + mainDirectoryName.Length)..];
 				var stream = new MemoryStream((int)entry.Length);
 				entry.Open().CopyTo(stream);
 				stream.Position = 0;

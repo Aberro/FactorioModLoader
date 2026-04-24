@@ -25,6 +25,7 @@ namespace FactorioModLoader
 		}
 		private static readonly Regex Regex = new Regex(@"^\s*((?<type>[!\?]|(\(\?\)))\s*)?(?<name>(?!(PRN|AUX|CLOCK\$|NUL|CON|COM\d|LPT\d|\..*)(\..+)?)[^\x00-\x1f\\?*:\"";|\/]+?)(\s*(?<equality>[>=<]|(>=)|(<=)))?\s*(?<version>\d{1,5}(\.\d{1,5}){1,3})?\s*$");
 
+        public string DependencyString { get; private set; }
 		public IModule? Module { get; private set; }
 		public Version Version { get; }
 		public DependencyTypeEnum Type { get; }
@@ -32,6 +33,7 @@ namespace FactorioModLoader
 		public string Name { get; }
 		public Dependency(string str)
 		{
+            DependencyString = str;
 			var match = Regex.Match(str);
 			if(!match.Success)
 				throw new ArgumentException("Invalid dependency string!");
@@ -120,5 +122,7 @@ namespace FactorioModLoader
 			}
 			throw new ArgumentException("Invalid module!", nameof(dependee));
 		}
+
+        public override string ToString() => DependencyString;
 	}
 }

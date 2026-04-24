@@ -25,13 +25,13 @@ namespace FactorioModLoader.Prototypes
 		/// </summary
 		[PublicAPI]
 		[DefaultValue(null)]
-		LocalizedString? LocalisedDescription { get; }
+		LocalisedString? LocalisedDescription { get; }
 		/// <summary>
 		/// Overwrites the name set in the locale file. Can be used to easily set a procedurally-generated name because the LocalisedString format allows to insert parameters into the name directly from the Lua script.
 		/// </summary>
 		[PublicAPI]
 		[DefaultValue(null)]
-		LocalizedString? LocalisedName { get; }
+		LocalisedString? LocalisedName { get; }
 		/// <summary>
 		/// Used to order items in inventory, recipes and GUI's.
 		/// </summary>

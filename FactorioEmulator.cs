@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -181,6 +182,7 @@ namespace FactorioModLoader
 		public async void Start()
 		{
 			_hasStarted = true;
+            await Task.Delay(0);
 			// ReSharper disable VariableHidesOuterVariable
 			void DefineSettings(dynamic raw, dynamic settingsStartup, dynamic settingsGlobal, dynamic settingsPlayer, string settingType)
 				// ReSharper restore VariableHidesOuterVariable
@@ -286,14 +288,15 @@ namespace FactorioModLoader
 					var mod = ActiveModules[i];
 					foreach (var dep in mod.Dependencies)
 					{
-						var dependee = ActiveModules.FirstOrDefault(x => x.Name == dep.Name);
+						var cleanName = dep.Name.Replace("~ ", "");
+						var dependee = ActiveModules.FirstOrDefault(x => x.Name == cleanName);
 						if (dependee != null)
 						{
 							if (ActiveModules.IndexOf(dependee) > i)
-								throw new ApplicationException("Dependency order is compromised!");
+								throw new ApplicationException($"Dependency order is invalid: {dep.Name!} should be loaded before {mod.Name}");
 						}
 						else if(dep.Type == Dependency.DependencyTypeEnum.Required)
-								throw new ApplicationException("Dependency doesn't met!");
+								throw new ApplicationException($"Dependency doesn't met: {dep.Name}!");
 					}
 				}
 			}
@@ -392,8 +395,11 @@ namespace FactorioModLoader
 				}
 				else
 				{
-					var match = _availableModules.Where(x => x.Name == name).OrderByDescending(x => x.Version).First();
-					ActivateModule(match);
+					var match = _availableModules.Where(x => x.Name == name).OrderByDescending(x => x.Version).FirstOrDefault();
+                    if(match is not null)
+                        ActivateModule(match);
+                    else
+                        Debug.WriteLine($"Module not found: {name}");
 				}
 			}
 		}
@@ -429,16 +435,16 @@ namespace FactorioModLoader
 			return Task.FromResult((Stream?)null);
 		}
 		[PublicAPI]
-		public string LocalizeString(string locale, LocalizedString str, params object[] args)
+		public string LocalizeString(string locale, LocalisedString str, params object[] args)
 		{
 			if (!TryLocalizeString(locale, str, out var result, args))
 				return str.Key;
 			return result;
 		}
 		[PublicAPI]
-		public bool TryLocalizeString(string locale, LocalizedString str, out string result, params object[] args)
+		public bool TryLocalizeString(string locale, LocalisedString str, out string result, params object[] args)
 		{
-			bool ParametrizeLocalizedString(LocalizedString input, out string parametrized)
+			bool ParametrizeLocalizedString(LocalisedString input, out string parametrized)
 			{
 				object?[] transformed = new object?[input.Parameters.Count];
 				for (var i = 0; i < input.Parameters.Count; i++)
@@ -496,7 +502,7 @@ namespace FactorioModLoader
 					if (match.Groups["num"].Length > 0)
 						return $"{{{argIdx++}}}";
 					if (match.Groups["group"].Length <= 0) return "";
-					if (!ParametrizeLocalizedString(new LocalizedString($"{match.Groups["group"].Value.ToLower()}-name.{match.Groups["key"]}"), out var s))
+					if (!ParametrizeLocalizedString(new LocalisedString($"{match.Groups["group"].Value.ToLower()}-name.{match.Groups["key"]}"), out var s))
 						System.Diagnostics.Debugger.Break();
 					return s;
 				});

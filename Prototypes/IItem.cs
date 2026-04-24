@@ -34,5 +34,30 @@ namespace FactorioModLoader.Prototypes
 		[PublicAPI]
 		[DefaultValue(null)]
 		IEquipment? PlacedAsEquipmentResult { get; }
+
+		[PublicAPI]
+		[DefaultValue(null)]
+		IItem? BurntResult { get; }
+
+
+		[PublicAPI]
+		[DefaultValue(1.0)]
+		double FuelAccelerationMultiplier { get; }
+
+		[PublicAPI]
+		[DefaultValue(FuelCategory.None)]
+		FuelCategory FuelCategory { get; }
+
+		[PublicAPI]
+		[DefaultValue(1.0)]
+		double FuelEmissionsMultiplier { get; }
+
+		[PublicAPI]
+		[DefaultValue(1.0)]
+		double FuelTopSpeedMultiplier { get; }
+
+		[PublicAPI]
+		[DefaultValue("0J")]
+		Energy FuelValue { get; }
 	}
 }

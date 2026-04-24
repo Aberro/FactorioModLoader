@@ -1,6 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.ComponentModel;
+using JetBrains.Annotations;
 
 namespace FactorioModLoader.Prototypes
 {
@@ -8,5 +7,9 @@ namespace FactorioModLoader.Prototypes
 	[Repository("data.raw.crafting-machine")]
 	public interface IEntity : IPrototypeBase
 	{
+		[PublicAPI]
+		[DefaultValue(null)]
+		MineableProperties? Minable { get; }
+
 	}
 }

@@ -140,5 +140,4 @@ namespace FactorioModLoader
 			Index = index;
 		}
 	}
-
 }

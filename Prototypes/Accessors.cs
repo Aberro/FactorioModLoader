@@ -28,4 +28,31 @@ namespace FactorioModLoader.Prototypes
 			}
 		}
 	}
+
+	public class EnergySourceAccessor
+	{
+		public static IEnergySource EnergySource(ICraftingMachine instance, dynamic data)
+		{
+			var dic = (IDictionary<string, object>)data;
+			if(!dic.TryGetValue("energy_source", out dynamic? sourceData))
+				throw new ApplicationException("'energy_source' property should be defined!");
+			dic = (IDictionary<string, object>)sourceData;
+			if (!dic.TryGetValue("type", out var type))
+				throw new ApplicationException("'type' property should be defined!");
+			return (string) type switch
+			{
+				"electric" =>
+				DataLoader.Current?.ProxyValue(typeof(IElectricEnergySource), sourceData) ?? throw new ApplicationException(),
+				"burner" =>
+				DataLoader.Current?.ProxyValue(typeof(IBurnerEnergySource), sourceData) ?? throw new ApplicationException(),
+				"heat" =>
+				DataLoader.Current?.ProxyValue(typeof(IHeatEnergySource), sourceData) ?? throw new ApplicationException(),
+				"fluid" =>
+				DataLoader.Current?.ProxyValue(typeof(IFluidEnergySource), sourceData) ?? throw new ApplicationException(),
+				"void" =>
+				DataLoader.Current?.ProxyValue(typeof(IVoidEnergySource), sourceData) ?? throw new ApplicationException(),
+				_ => throw new ApplicationException("Unknown energy source type!")
+			};
+		}
+	}
 }

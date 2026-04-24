@@ -7,25 +7,25 @@ using JetBrains.Annotations;
 namespace FactorioModLoader.Prototypes
 {
 	[PublicAPI]
-	public class LocalizedString
+	public class LocalisedString
 	{
 		[PublicAPI]
-		public IList<LocalizedString> Parameters { get; }
+		public IList<LocalisedString> Parameters { get; }
 		[PublicAPI]
 		public string Key { get; }
 
 		[PublicAPI]
-		public LocalizedString(dynamic data)
+		public LocalisedString(dynamic data)
 		{
 			if (data is string str)
 			{
 				Key = str;
-				Parameters = Array.Empty<LocalizedString>();
+				Parameters = Array.Empty<LocalisedString>();
 			}
 			else
 			{
 				Key = (string) data[0];
-				Parameters = ((IEnumerable<dynamic>)data).Skip(1).Select(x => new LocalizedString(x)).ToArray();
+				Parameters = ((IEnumerable<dynamic>)data).Skip(1).Select(x => new LocalisedString(x)).ToArray();
 			}
 		}
 	}

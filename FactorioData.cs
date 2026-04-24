@@ -61,6 +61,8 @@ namespace FactorioModLoader
 		[PublicAPI]
 		public IDictionary<string, IEntity> Entities { get; set; } = null!;
 		[PublicAPI]
+		public IDictionary<string, IResourceEntity> Resources { get; set; } = null!;
+		[PublicAPI]
 		public IDictionary<string, IEquipment> Equipment { get; set; } = null!;
 		[PublicAPI]
 		public IDictionary<string, ICraftingMachine> CraftingMachines { get; set; } = null!;
@@ -153,6 +155,7 @@ namespace FactorioModLoader
 			};
 			Entities = _loader.LoadRepositories<IEntity>("data.raw.entity",
 				raw.Where(x => repositories.Contains(x.Key)).Select(x => x.Value).ToArray());
+			Resources = _loader.LoadRepository<IResourceEntity>("data.raw.resource", raw["resource"]);
 
 			repositories = new[]
 			{
